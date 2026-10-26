@@ -19,7 +19,7 @@
 // 
 //////////////////////////////////////////////////////////////////////////////////
 
-
+/*
 module datapath_board(input clk, input reset, input [1:0]ledSel, input[3:0]ssdSel, input ssdClk, output[15:0]leds, output [3:0] Anode, output [6:0] LED_out);
 wire [31:0] pcValue;
 wire [31:0] readData1, readData2;
@@ -81,3 +81,4 @@ always@(*) begin
 end
 Four_Digit_Seven_Segment_Driver_Optimized(ssdClk,ssd_output,Anode,LED_out);
 endmodule
+*/

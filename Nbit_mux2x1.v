@@ -21,7 +21,7 @@
 
 
 module Nbit_mux2x1 #(parameter N = 32)(
-input [N-1: 0] a, [N-1: 0] b, input s, output [N-1:0] c);
+input [N-1: 0] a, input [N-1: 0] b, input s, output [N-1:0] c);
 
 genvar i;
 

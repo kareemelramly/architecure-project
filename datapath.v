@@ -37,6 +37,11 @@ wire [31:0] pcPlus4;
 wire [31:0] jumpOffset;
 wire [31:0] jumpTarget;
 wire [31:0] pcInput;
+
+// NEW WIRE: Branch decision output from BranchUnit
+wire takeBranch;
+
+
 DataMem DataMemory(clk,memRead,memWrite,AluOutput[7:2],readData2,data_memory_out);
 InstMem InstructionMemory(pcValue[7:2],inst_memory_out);
 Nbit_mux2x1 #(32) regWriteInput(AluOutput,data_memory_out,memToReg,regWriteData);
@@ -46,9 +51,15 @@ ALU #(32) aluModule(readData1,aluInputData2,AluSel,AluOutput,AluZero);
 ImmGen immGenerator(inst_memory_out,immGenOut);
 alu_unit AluControl(inst_memory_out,AluOp,AluSel);
 control_unit controlUnit(inst_memory_out,branch,memRead, memToReg,memWrite,ALUsource,regWrite,AluOp);
+
+// NEW MODULE INSTANTIATION: Evaluates BEQ, BNE, BLT, BGE, BLTU, BGEU
+BranchUnit branchComparator(branch, inst_memory_out[14:12], readData1, readData2, takeBranch);
+
 assign pcPlus4 = pcValue + 4;
 Nbit_shift_left #(32) jumpOffsetModule(immGenOut,jumpOffset);
 assign jumpTarget = jumpOffset + pcValue;
-Nbit_mux2x1 #(32) nextPc(pcPlus4,jumpTarget,branch & AluZero,pcInput);
+
+// UPDATED MUX: Uses takeBranch instead of (branch & AluZero)
+Nbit_mux2x1 #(32) nextPc(pcPlus4,jumpTarget,takeBranch,pcInput);
 N_bit_register pcRegister(1'b1,clk,reset,pcInput,pcValue);
 endmodule
