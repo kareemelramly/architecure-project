@@ -33,6 +33,8 @@ else if(aluSel==4'b0000)
     result = in1&in2;
 else if(aluSel==4'b0001)
     result = in1|in2;
+else if (aluSel == 4'b0100)
+    result = in1^in2; 
 else
     result = 0;
 end

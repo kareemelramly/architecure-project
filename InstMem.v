@@ -95,8 +95,9 @@ initial begin
         mem[45] = 32'b0000_0001_0000_00000_000_00000_0001111; // pause (NOP)
         mem[46] = 32'b0000000_00010_00001_000_10000_0110011; // add x16, x1, x2 -> x16 = 30 (executes normally after the fences)
         mem[47] = 32'b0000001_10000_00000_010_00000_0100011; // sw  x16, 32(x0) -> DataMem[8] = 30
-        mem[48] = 32'b000000000000_00000_000_00000_1110011; // ecall -> PC stops here (halt)
-        mem[49] = 32'b0000000_00001_00001_000_10001_0110011; // add x17, x1, x1 -> MUST NOT execute (x17 stays 0)
+        mem[48] = 32'b0000000_00010_00001_100_10001_0110011; // xor x17, x1, x2 -> x17 = 30 (x1=10, x2=20 still intact)
+        mem[49] = 32'b000000000000_00000_000_00000_1110011;  // ecall -> PC stops here (byte 196)
+        mem[50] = 32'b0000000_00001_00001_000_10010_0110011; // add x18, x1, x1 -> MUST NOT execute (x18 stays 0)
     end
 assign data_out = mem[addr];
 endmodule

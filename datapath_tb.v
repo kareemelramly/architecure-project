@@ -102,10 +102,11 @@ module datapath_tb();
         $display("--- FENCE / FENCE.TSO / PAUSE / ECALL ---");
         check("add after fences (x16 = 30)",  CPU.RegisterFile.D[16], 32'd30);
         check("sw x16 (DataMem[8] = 30)",     CPU.DataMemory.mem[8],  32'd30);
+        check("xor execution (x17 = 30)",     CPU.RegisterFile.D[17], 32'd30);
         check("x1 unchanged by fences",       CPU.RegisterFile.D[1],  32'd10);
         check("x0 still zero",                CPU.RegisterFile.D[0],  32'd0);
-        check("PC frozen on ECALL (byte 192)", CPU.pcValue,           32'd192);
-        check("add after ECALL not executed (x17 = 0)", CPU.RegisterFile.D[17], 32'd0);
+        check("PC frozen on ECALL (byte 196)",          CPU.pcValue,            32'd196);
+        check("add after ECALL not executed (x18 = 0)", CPU.RegisterFile.D[18], 32'd0);
 
         $display("--- Control unit decode ---");
         check_nop_decode("FENCE",     32'h0FF0000F, 1'b0);
