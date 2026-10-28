@@ -2,11 +2,11 @@
 2020.2
 Apr 18 2022
 16:05:34
-C:/Users/Mou_45/architecure-project/ALU.v,1793203329,verilog,,C:/Users/Mou_45/architecure-project/BranchUnit.v,,ALU,,,,,,,,
+C:/Users/Mou_45/architecure-project/ALU.v,1793208939,verilog,,C:/Users/Mou_45/architecure-project/BranchUnit.v,,ALU,,,,,,,,
 C:/Users/Mou_45/architecure-project/BranchUnit.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/DataMem.v,,BranchUnit,,,,,,,,
 C:/Users/Mou_45/architecure-project/DataMem.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/ImmGen.v,,DataMem,,,,,,,,
 C:/Users/Mou_45/architecure-project/ImmGen.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/InstMem.v,,ImmGen,,,,,,,,
-C:/Users/Mou_45/architecure-project/InstMem.v,1793206173,verilog,,C:/Users/Mou_45/architecure-project/N-bit-shift.v,,InstMem,,,,,,,,
+C:/Users/Mou_45/architecure-project/InstMem.v,1793209021,verilog,,C:/Users/Mou_45/architecure-project/N-bit-shift.v,,InstMem,,,,,,,,
 C:/Users/Mou_45/architecure-project/MS2/MS2.sim/sim_1/behav/xsim/glbl.v,1649976174,verilog,,,,glbl,,,,,,,,
 C:/Users/Mou_45/architecure-project/N-bit-shift.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/N_bit_register.v,,Nbit_shift_left,,,,,,,,
 C:/Users/Mou_45/architecure-project/N_bit_register.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/Nbit_decoder.v,,DFlipFlop;N_bit_register;mux2x1,,,,,,,,

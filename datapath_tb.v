@@ -104,9 +104,16 @@ module datapath_tb();
         check("sw x16 (DataMem[8] = 30)",     CPU.DataMemory.mem[8],  32'd30);
         check("xor execution (x17 = 30)",     CPU.RegisterFile.D[17], 32'd30);
         check("x1 unchanged by fences",       CPU.RegisterFile.D[1],  32'd10);
-        check("x0 still zero",                CPU.RegisterFile.D[0],  32'd0);
+        check("x0 still zero",                CPU.RegisterFile.D[0],  32'd0);        
         check("PC frozen on ECALL (byte 196)",          CPU.pcValue,            32'd196);
-        check("add after ECALL not executed (x18 = 0)", CPU.RegisterFile.D[18], 32'd0);
+        check("add after ECALL not executed (x18 = 0)", CPU.RegisterFile.D[18], 32'd0);   
+        
+        $display("--- SLL / SLT / SLTU / SRL / SRA ---");
+        check("sll  x19 (10 << 20)",          CPU.RegisterFile.D[19], 32'h00A00000);
+        check("slt  x20 (-5 < 10 signed)",    CPU.RegisterFile.D[20], 32'd1);
+        check("sltu x21 (0xFFFFFFFB < 10)",   CPU.RegisterFile.D[21], 32'd0);
+        check("srl  x23 (logical >> 10)",     CPU.RegisterFile.D[23], 32'h003FFFFF);
+        check("sra  x24 (arithmetic >>> 10)", CPU.RegisterFile.D[24], 32'hFFFFFFFF);
 
         $display("--- Control unit decode ---");
         check_nop_decode("FENCE",     32'h0FF0000F, 1'b0);
@@ -115,6 +122,7 @@ module datapath_tb();
         check_nop_decode("ECALL",     32'h00000073, 1'b1);
         check_nop_decode("EBREAK",    32'h00100073, 1'b1);
         check_nop_decode("CSRRW (not ECALL/EBREAK)", 32'h30051073, 1'b0);
+        
 
         $display("=====================================================================================");
         if (errors == 0)

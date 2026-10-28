@@ -38,6 +38,16 @@ else if(aluOp==2'b10 && inst[14:12]== 3'b110 && inst[30]== 1'b0)
      AluSelection = 4'b0001;
 else if(aluOp==2'b10 && inst[14:12]== 3'b100 && inst[30]== 1'b0)
     AluSelection = 4'b0100; 
+else if(aluOp==2'b10 && inst[14:12]== 3'b001 && inst[30]== 1'b0)
+    AluSelection = 4'b1000; 
+else if(aluOp == 2'b10 && inst[14:12]== 3'b101 && inst[30]== 1'b0)
+    AluSelection = 4'b1001; 
+else if(aluOp == 2'b10 && inst[14:12]== 3'b101 && inst[30]== 1'b1)
+    AluSelection = 4'b1010; 
+else if(aluOp == 2'b10 && inst[14:12]== 3'b010 && inst[30]== 1'b0)
+    AluSelection = 4'b0111; 
+else if(aluOp == 2'b10 && inst[14:12]== 3'b011 && inst[30]== 1'b0)
+    AluSelection  = 0011; 
 else
      AluSelection = 4'bx;
 end
