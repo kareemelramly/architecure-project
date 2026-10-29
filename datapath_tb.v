@@ -4,7 +4,10 @@ module datapath_tb();
     reg clk;
     reg reset;
 
-    datapath CPU(clk, reset);
+    datapath CPU(
+        .clk(clk),
+        .reset(reset)
+    );
 
     // 20ns clock period
     initial begin
@@ -13,37 +16,54 @@ module datapath_tb();
     end
 
     initial begin
-        // Apply reset
         reset = 1;
         #20;
         reset = 0;
 
-        $display("======================================================================");
-        $display("Time | PC (Byte) | WordIdx | Funct3 | Branch | TakeBranch | AluOutput");
-        $display("======================================================================");
+        $display("Running full instruction set validation...");
+        
+        // Wait 40 clock cycles to ensure all instructions complete
+        #800; 
 
-        // Run for 25 clock cycles (500 ns) to complete all instructions
-        #500;
+        $display("===============================================================");
+        $display("                     FINAL VALIDATION RESULTS                  ");
+        $display("===============================================================");
 
-        $display("======================================================================");
-        $display("Final Pass Score (DataMem[3], Expected 70) : %0d", CPU.DataMemory.mem[3]);
-        $display("Final Trap Count (DataMem[4], Expected 0)  : %0d", CPU.DataMemory.mem[4]);
-
-        if (CPU.DataMemory.mem[3] == 32'd70 && CPU.DataMemory.mem[4] == 32'd0)
-            $display(">>> SIMULATION PASSED: All 6 branch types (BEQ, BNE, BLT, BGE, BLTU, BGEU) work! <<<");
+        // Verify Arithmetic (ADD / SUB / OR / AND)
+        if (CPU.DataMemory.mem[4] === 32'd30 && CPU.DataMemory.mem[5] === 32'd10)
+            $display(" [PASS] ALU (ADD/SUB/AND/OR): Validated");
         else
-            $display(">>> SIMULATION FAILED: Check waveform! <<<");
-        $display("======================================================================");
+            $display(" [FAIL] ALU (ADD/SUB/AND/OR): mem[4]=%0d, mem[5]=%0d (Expected: 30, 10)", CPU.DataMemory.mem[4], CPU.DataMemory.mem[5]);
 
+        // Verify U-Type Instructions
+        if (CPU.DataMemory.mem[6] === 32'h12345000)
+            $display(" [PASS] LUI: Validated (0x12345000)");
+        else
+            $display(" [FAIL] LUI: 0x%08h (Expected: 0x12345000)", CPU.DataMemory.mem[6]);
+
+        if (CPU.DataMemory.mem[7] === 32'h00002050)
+            $display(" [PASS] AUIPC: Validated (0x00002050)");
+        else
+            $display(" [FAIL] AUIPC: 0x%08h (Expected: 0x00002050)", CPU.DataMemory.mem[7]);
+
+        // Verify Jumps & Links
+        if (CPU.DataMemory.mem[8] === 32'd88)
+            $display(" [PASS] JAL: Link Validated (88)");
+        else
+            $display(" [FAIL] JAL: %0d (Expected: 88)", CPU.DataMemory.mem[8]);
+
+        if (CPU.DataMemory.mem[9] === 32'd100)
+            $display(" [PASS] JALR: Link Validated (100)");
+        else
+            $display(" [FAIL] JALR: %0d (Expected: 100)", CPU.DataMemory.mem[9]);
+
+        // Verify Conditional Branches (Error Count Check)
+        if (CPU.DataMemory.mem[10] === 32'd0)
+            $display(" [PASS] BRANCHES: All branches correctly taken, 0 traps hit");
+        else
+            $display(" [FAIL] BRANCHES: Traps triggered. Error Count: %0d", CPU.DataMemory.mem[10]);
+
+        $display("===============================================================");
         $finish;
-    end
-
-    // Print state at the negative edge of clk (after signals settle, before PC updates)
-    always @(negedge clk) begin
-        if (!reset) begin
-            $display("%4t |    %3d    |   %2d    |  %b   |   %b    |     %b      |    %0d",
-                     $time, CPU.pcValue, CPU.pcValue[7:2],
-                     CPU.inst_memory_out[14:12], CPU.branch, CPU.takeBranch, CPU.AluOutput);
-        end
     end
 endmodule
