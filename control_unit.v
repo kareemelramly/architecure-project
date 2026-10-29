@@ -43,6 +43,9 @@ else if(inst[6:2]==5'b11100) begin
     if (inst[14:12]==3'b000 && inst[11:7]==5'b00000 && inst[19:15]==5'b00000 && inst[31:21]==11'b0)
         halt = 1'b1;
 end
+//IMM OP
+else if(inst[6:2]==5'b00100)
+    {branch,memRead, memToReg,aluOp,memWrite,ALUsource,regWrite} = 8'b00011011; 
 else
     {branch,memRead, memToReg,aluOp,memWrite,ALUsource,regWrite} = 8'b00000000;
 end

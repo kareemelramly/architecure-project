@@ -105,7 +105,6 @@ module datapath_tb();
         check("xor execution (x17 = 30)",     CPU.RegisterFile.D[17], 32'd30);
         check("x1 unchanged by fences",       CPU.RegisterFile.D[1],  32'd10);
         check("x0 still zero",                CPU.RegisterFile.D[0],  32'd0);        
-        check("PC frozen on ECALL (byte 196)",          CPU.pcValue,            32'd196);
         check("add after ECALL not executed (x18 = 0)", CPU.RegisterFile.D[18], 32'd0);   
         
         $display("--- SLL / SLT / SLTU / SRL / SRA ---");
@@ -114,6 +113,18 @@ module datapath_tb();
         check("sltu x21 (0xFFFFFFFB < 10)",   CPU.RegisterFile.D[21], 32'd0);
         check("srl  x23 (logical >> 10)",     CPU.RegisterFile.D[23], 32'h003FFFFF);
         check("sra  x24 (arithmetic >>> 10)", CPU.RegisterFile.D[24], 32'hFFFFFFFF);
+        
+        $display("--- OP-IMM: addi / xori / ori / andi / slli ---");
+        check("sltu x22 (10 < 0xFFFFFFFB)",  CPU.RegisterFile.D[22], 32'd1);
+        check("addi x25 (10 + 5)",           CPU.RegisterFile.D[25], 32'd15);
+        check("addi x26 (10 + -3)",          CPU.RegisterFile.D[26], 32'd7);
+        check("xori x27 (10 ^ 15)",          CPU.RegisterFile.D[27], 32'd5);
+        check("andi x28 (10 & 6)",           CPU.RegisterFile.D[28], 32'd2);
+        check("ori  x30 (10 | 6)",           CPU.RegisterFile.D[30], 32'd14);
+        check("slli x29 (10 << 4)",     CPU.RegisterFile.D[29], 32'h000000A0);
+        check("slli x31 (-5 << 31)",    CPU.RegisterFile.D[31], 32'h80000000);
+        check("PC frozen on ECALL (byte 248)",          CPU.pcValue,            32'd248);
+        check("add after ECALL not executed (x18 = 0)", CPU.RegisterFile.D[18], 32'd0);
 
         $display("--- Control unit decode ---");
         check_nop_decode("FENCE",     32'h0FF0000F, 1'b0);

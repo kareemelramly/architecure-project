@@ -41,4 +41,72 @@ Time | PC (Byte) | WordIdx | Instruction | Funct3 | MemRd | MemWr | Halt | AluOu
               740000 |    168    |   42    |  01c02783  |  010   |   1   |   0   |  0   |    28
               760000 |    172    |   43    |  0ff0000f  |  000   |   0   |   0   |  0   |    0
               780000 |    176    |   44    |  8330000f  |  000   |   0   |   0   |  0   |    0
-              800000 |    180    |   45    |  0
+              800000 |    180    |   45    |  0100000f  |  000   |   0   |   0   |  0   |    0
+              820000 |    184    |   46    |  00208833  |  000   |   0   |   0   |  0   |    30
+              840000 |    188    |   47    |  03002023  |  010   |   0   |   1   |  0   |    32
+              860000 |    192    |   48    |  0020c8b3  |  100   |   0   |   0   |  0   |    30
+              880000 |    196    |   49    |  002099b3  |  001   |   0   |   0   |  0   |    10485760
+              900000 |    200    |   50    |  0011aa33  |  010   |   0   |   0   |  0   |    1
+              920000 |    204    |   51    |  0011bab3  |  011   |   0   |   0   |  0   |    0
+              940000 |    208    |   52    |  0011dbb3  |  101   |   0   |   0   |  0   |    4194303
+              960000 |    212    |   53    |  4011dc33  |  101   |   0   |   0   |  0   |    4294967295
+              980000 |    216    |   54    |  0030bb33  |  011   |   0   |   0   |  0   |    1
+             1000000 |    220    |   55    |  00508c93  |  000   |   0   |   0   |  0   |    15
+             1020000 |    224    |   56    |  ffd08d13  |  000   |   0   |   0   |  0   |    7
+             1040000 |    228    |   57    |  00f0cd93  |  100   |   0   |   0   |  0   |    5
+             1060000 |    232    |   58    |  0060fe13  |  111   |   0   |   0   |  0   |    2
+             1080000 |    236    |   59    |  0060ef13  |  110   |   0   |   0   |  0   |    14
+             1100000 |    240    |   60    |  00409e93  |  001   |   0   |   0   |  0   |    160
+             1120000 |    244    |   61    |  01f19f93  |  001   |   0   |   0   |  0   |    2147483648
+=====================================================================================
+Cycles until halt : 56
+--- Branch tests (existing) ---
+  [ OK ]  Score (DataMem[3], Expected 70) : 0x00000046
+  [ OK ] p Count (DataMem[4], Expected 0) : 0x00000000
+--- LB / LBU / LH / LHU ---
+  [ OK ] lb  x6  (byte 0 = 0xB2) : 0xffffffb2
+  [ OK ] lb  x7  (byte 3 = 0x7C) : 0x0000007c
+  [ OK ] lbu x8  (byte 0 = 0xB2) : 0x000000b2
+  [ OK ] lbu x9  (byte 1 = 0xF1) : 0x000000f1
+  [ OK ] lh  x10 (half 0 = 0xF1B2) : 0xfffff1b2
+  [ OK ] lh  x11 (half 1 = 0x7C8A) : 0x00007c8a
+  [ OK ] lhu x12 (half 0 = 0xF1B2) : 0x0000f1b2
+  [ OK ] lhu x13 (half 1 = 0x7C8A) : 0x00007c8a
+--- SB / SH ---
+  [ OK ] DataMem[6] after 4x sb : 0x0afb140a
+  [ OK ] DataMem[7] after 2x sh : 0x0014fffb
+  [ OK ] lw x14 reads back sb word : 0x0afb140a
+  [ OK ] lw x15 reads back sh word : 0x0014fffb
+  [ OK ] DataMem[5] untouched : 0x7c8af1b2
+--- FENCE / FENCE.TSO / PAUSE / ECALL ---
+  [ OK ] add after fences (x16 = 30) : 0x0000001e
+  [ OK ] sw x16 (DataMem[8] = 30) : 0x0000001e
+  [ OK ] xor execution (x17 = 30) : 0x0000001e
+  [ OK ] x1 unchanged by fences : 0x0000000a
+  [ OK ] x0 still zero : 0x00000000
+  [ OK ] ter ECALL not executed (x18 = 0) : 0x00000000
+--- SLL / SLT / SLTU / SRL / SRA ---
+  [ OK ] sll  x19 (10 << 20) : 0x00a00000
+  [ OK ] slt  x20 (-5 < 10 signed) : 0x00000001
+  [ OK ] sltu x21 (0xFFFFFFFB < 10) : 0x00000000
+  [ OK ] srl  x23 (logical >> 10) : 0x003fffff
+  [ OK ] sra  x24 (arithmetic >>> 10) : 0xffffffff
+--- OP-IMM: addi / xori / ori / andi / slli ---
+  [ OK ] sltu x22 (10 < 0xFFFFFFFB) : 0x00000001
+  [ OK ] addi x25 (10 + 5) : 0x0000000f
+  [ OK ] addi x26 (10 + -3) : 0x00000007
+  [ OK ] xori x27 (10 ^ 15) : 0x00000005
+  [ OK ] andi x28 (10 & 6) : 0x00000002
+  [ OK ] ori  x30 (10 | 6) : 0x0000000e
+  [ OK ] slli x29 (10 << 4) : 0x000000a0
+  [ OK ] slli x31 (-5 << 31) : 0x80000000
+  [ OK ] PC frozen on ECALL (byte 248) : 0x000000f8
+  [ OK ] ter ECALL not executed (x18 = 0) : 0x00000000
+--- Control unit decode ---
+  [ OK ] FENCE decode : no reg/mem/branch side effects, halt=0
+  [ OK ] FENCE.TSO decode : no reg/mem/branch side effects, halt=0
+  [ OK ] PAUSE decode : no reg/mem/branch side effects, halt=0
+  [ OK ] ECALL decode : no reg/mem/branch side effects, halt=1
+  [ OK ] EBREAK decode : no reg/mem/branch side effects, halt=1
+  [ OK ] CSRRW (not ECALL/EBREAK) decode : no reg/mem/branch side effects, halt=0
+===========================================================================

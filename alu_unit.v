@@ -45,9 +45,20 @@ else if(aluOp == 2'b10 && inst[14:12]== 3'b101 && inst[30]== 1'b0)
 else if(aluOp == 2'b10 && inst[14:12]== 3'b101 && inst[30]== 1'b1)
     AluSelection = 4'b1010; 
 else if(aluOp == 2'b10 && inst[14:12]== 3'b010 && inst[30]== 1'b0)
-    AluSelection = 4'b0111; 
+    AluSelection = 4'b0111;
 else if(aluOp == 2'b10 && inst[14:12]== 3'b011 && inst[30]== 1'b0)
-    AluSelection  = 0011; 
+    AluSelection = 4'b0011;   
+//new
+else if(aluOp == 2'b11 && inst[14:12]== 3'b000)
+    AluSelection  = 4'b0010; //ADDI
+else if(aluOp == 2'b11 && inst[14:12]== 3'b100)
+    AluSelection  = 4'b0100; //XORI
+else if(aluOp == 2'b11 && inst[14:12]== 3'b110)
+    AluSelection  = 4'b0001; //ORI
+else if(aluOp == 2'b11 && inst[14:12]== 3'b111)
+    AluSelection  = 4'b0000; //ANDI
+else if(aluOp == 2'b11 && inst[14:12]== 3'b001)
+    AluSelection  = 4'b1000; //SLLI
 else
      AluSelection = 4'bx;
 end

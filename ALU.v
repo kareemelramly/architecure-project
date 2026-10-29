@@ -26,25 +26,25 @@ input [3:0] aluSel,
 output reg [N-1:0] result, output zero );
 always @(*) begin
 if (aluSel==4'b0010)
-    result = in1+in2; //ADD
+    result = in1+in2; //ADD R & I
 else if(aluSel==4'b0110)
-    result = in1-in2; //SUB
+    result = in1-in2; //SUB R & I 
 else if(aluSel==4'b0000)
-    result = in1&in2; //AND
+    result = in1&in2; //AND R & I 
 else if(aluSel==4'b0001)
-    result = in1|in2; //OR
+    result = in1|in2; //OR r & I
 else if (aluSel == 4'b0100)
-    result = in1^in2; //XOR 
+    result = in1^in2; //XOR R & I
 else if (aluSel == 4'b1000)
-    result = in1 << in2[4:0]; //SLL
+    result = in1 << in2[4:0]; //SLL R & I
 else if (aluSel == 4'b1001)
-    result = in1 >> in2[4:0]; //SRL
+    result = in1 >> in2[4:0]; //SRL R & I
 else if (aluSel == 4'b1010)
-    result = $signed(in1) >>> in2[4:0]; //SRA
+    result = $signed(in1) >>> in2[4:0]; //SRA R & I 
 else if (aluSel == 4'b0111) 
-    result = ($signed(in1) < $signed(in2)) ? 1 : 0; //SLT
+    result = ($signed(in1) < $signed(in2)) ? 1 : 0; //SLT R & I 
 else if (aluSel == 4'b0011)
-    result = (in1 < in2) ? 1:0;  //SLTU
+    result = (in1 < in2) ? 1:0;  //SLTU R & I 
 else
     result = 0;
 end
