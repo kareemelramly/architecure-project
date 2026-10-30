@@ -1,0 +1,19 @@
+0.7
+2020.2
+Apr 18 2022
+16:05:34
+C:/Users/Mou_45/architecure-project/ALU.v,1793282095,verilog,,C:/Users/Mou_45/architecure-project/BranchUnit.v,,ALU,,,,,,,,
+C:/Users/Mou_45/architecure-project/BranchUnit.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/DataMem.v,,BranchUnit,,,,,,,,
+C:/Users/Mou_45/architecure-project/DataMem.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/ImmGen.v,,DataMem,,,,,,,,
+C:/Users/Mou_45/architecure-project/ImmGen.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/InstMem.v,,ImmGen,,,,,,,,
+C:/Users/Mou_45/architecure-project/InstMem.v,1793282467,verilog,,C:/Users/Mou_45/architecure-project/N-bit-shift.v,,InstMem,,,,,,,,
+C:/Users/Mou_45/architecure-project/MS2/MS2.sim/sim_1/behav/xsim/glbl.v,1649976174,verilog,,,,glbl,,,,,,,,
+C:/Users/Mou_45/architecure-project/N-bit-shift.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/N_bit_register.v,,Nbit_shift_left,,,,,,,,
+C:/Users/Mou_45/architecure-project/N_bit_register.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/Nbit_decoder.v,,DFlipFlop;N_bit_register;mux2x1,,,,,,,,
+C:/Users/Mou_45/architecure-project/Nbit_decoder.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/Nbit_mux2x1.v,,Nbit_decoder,,,,,,,,
+C:/Users/Mou_45/architecure-project/Nbit_mux2x1.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/Nbit_register_file.v,,Nbit_mux2x1,,,,,,,,
+C:/Users/Mou_45/architecure-project/Nbit_register_file.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/alu_unit.v,,RegFile,,,,,,,,
+C:/Users/Mou_45/architecure-project/alu_unit.v,1793283399,verilog,,C:/Users/Mou_45/architecure-project/control_unit.v,,alu_unit,,,,,,,,
+C:/Users/Mou_45/architecure-project/control_unit.v,1793204771,verilog,,C:/Users/Mou_45/architecure-project/datapath.v,,control_unit,,,,,,,,
+C:/Users/Mou_45/architecure-project/datapath.v,1793186253,verilog,,C:/Users/Mou_45/architecure-project/datapath_tb.v,,datapath,,,,,,,,
+C:/Users/Mou_45/architecure-project/datapath_tb.v,1793206491,verilog,,,,datapath_tb,,,,,,,,

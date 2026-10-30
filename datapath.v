@@ -11,7 +11,7 @@ module datapath(input clk, input reset);
     wire AluZero;
 
     // Control wires
-    wire branch, memRead, memWrite, ALUsource, ALUSrcA, regWrite;
+    wire branch, memRead, memWrite, ALUsource, ALUSrcA, regWrite, halt;
     wire [1:0] memToReg;
     wire [1:0] AluOp;
     wire isJal, isJalr;
@@ -48,7 +48,7 @@ module datapath(input clk, input reset);
 
     control_unit controlUnit(
         inst_memory_out, branch, memRead, memToReg, memWrite, 
-        ALUsource, ALUSrcA, regWrite, AluOp, isJal, isJalr
+        ALUsource, ALUSrcA, regWrite, AluOp, isJal, isJalr, halt
     );
 
     alu_unit AluControl(
@@ -93,7 +93,7 @@ module datapath(input clk, input reset);
     end
 
     N_bit_register pcRegister(
-        1'b1, clk, reset, pcInput, pcValue
+        ~halt, clk, reset, pcInput, pcValue
     );
 
 endmodule

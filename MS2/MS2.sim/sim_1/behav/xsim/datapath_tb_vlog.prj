@@ -1,0 +1,22 @@
+# compile verilog/system verilog design source files
+verilog xil_defaultlib  \
+"../../../../../ALU.v" \
+"../../../../../BranchUnit.v" \
+"../../../../../DataMem.v" \
+"../../../../../ImmGen.v" \
+"../../../../../InstMem.v" \
+"../../../../../N-bit-shift.v" \
+"../../../../../N_bit_register.v" \
+"../../../../../Nbit_decoder.v" \
+"../../../../../Nbit_mux2x1.v" \
+"../../../../../Nbit_register_file.v" \
+"../../../../../alu_unit.v" \
+"../../../../../control_unit.v" \
+"../../../../../datapath.v" \
+"../../../../../datapath_tb.v" \
+
+# compile glbl module
+verilog xil_defaultlib "glbl.v"
+
+# Do not sort compile order
+nosort

@@ -11,7 +11,8 @@ module control_unit(
     output reg regWrite,
     output reg [1:0] aluOp,
     output reg isJal,
-    output reg isJalr
+    output reg isJalr,
+    output reg halt
 );
     wire [6:2] opcode = inst[6:2];
 
@@ -27,6 +28,7 @@ module control_unit(
         aluOp     = 2'b00;
         isJal     = 1'b0;
         isJalr    = 1'b0;
+        halt      = 1'b0;
 
         case (opcode)
             // R-type (add, sub, or, and, etc.)
@@ -39,7 +41,7 @@ module control_unit(
             5'b00100: begin
                 regWrite  = 1'b1;
                 ALUsource = 1'b1;
-                aluOp     = 2'b10;
+                aluOp     = 2'b11;
             end
 
             // Loads (lw, lb, lh, etc.)
@@ -91,6 +93,12 @@ module control_unit(
                 isJalr   = 1'b1;
                 regWrite = 1'b1;
                 memToReg = 2'b10; // Write PC+4 to rd
+            end
+          
+            // SYSTEM opcode: ECALL (imm=0) and EBREAK (imm=1) stop the PC, any other SYSTEM encoding is a NOP
+            b11100: begin
+                if (inst[14:12]==3'b000 && inst[11:7]==5'b00000 && inst[19:15]==5'b00000 && inst[31:21]==11'b0)
+                  halt = 1'b1;
             end
 
             default: begin
