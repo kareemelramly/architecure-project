@@ -1,8 +1,14 @@
 `timescale 1ns / 1ps
 
-module DataMem
-(input clk, input MemRead, input MemWrite, input [2:0] funct3,
-input [7:0] addr, input [31:0] data_in, output [31:0] data_out);
+module DataMem (
+    input         clk,
+    input         MemRead,
+    input         MemWrite,
+    input  [2:0]  funct3,
+    input  [7:0]  addr,
+    input  [31:0] data_in,
+    output [31:0] data_out
+);
 reg [31:0] mem [0:63];
 integer i;
 

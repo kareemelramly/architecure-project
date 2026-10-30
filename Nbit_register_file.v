@@ -36,6 +36,6 @@ begin: Gen_Modules
 N_bit_register  #(N) uut2(regwrite & choice[i], clk, rst, writedata, D[i]); 
 end
 endgenerate
-assign readdata1 = D[readreg1];
-assign readdata2 = D[readreg2];
+assign readdata1 = (readreg1 == 5'd0) ? {N{1'b0}} : D[readreg1];
+assign readdata2 = (readreg2 == 5'd0) ? {N{1'b0}} : D[readreg2];
 endmodule

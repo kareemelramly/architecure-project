@@ -5,10 +5,8 @@ verilog xil_defaultlib  \
 "../../../../../DataMem.v" \
 "../../../../../ImmGen.v" \
 "../../../../../InstMem.v" \
-"../../../../../N-bit-shift.v" \
 "../../../../../N_bit_register.v" \
 "../../../../../Nbit_decoder.v" \
-"../../../../../Nbit_mux2x1.v" \
 "../../../../../Nbit_register_file.v" \
 "../../../../../alu_unit.v" \
 "../../../../../control_unit.v" \

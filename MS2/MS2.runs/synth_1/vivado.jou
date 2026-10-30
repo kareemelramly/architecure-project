@@ -1,0 +1,13 @@
+#-----------------------------------------------------------
+# Vivado v2022.1 (64-bit)
+# SW Build 3526262 on Mon Apr 18 15:48:16 MDT 2022
+# IP Build 3524634 on Mon Apr 18 20:55:01 MDT 2022
+# Start of session at: Fri Oct 30 16:37:43 2026
+# Process ID: 26692
+# Current directory: C:/Users/Mou_45/architecure-project/MS2/MS2.runs/synth_1
+# Command line: vivado.exe -log Nbit_mux2x1.vds -product Vivado -mode batch -messageDb vivado.pb -notrace -source Nbit_mux2x1.tcl
+# Log file: C:/Users/Mou_45/architecure-project/MS2/MS2.runs/synth_1/Nbit_mux2x1.vds
+# Journal file: C:/Users/Mou_45/architecure-project/MS2/MS2.runs/synth_1\vivado.jou
+# Running On: CSE-P07-2168-B2, OS: Windows, CPU Frequency: 2112 MHz, CPU Physical cores: 20, Host memory: 34031 MB
+#-----------------------------------------------------------
+source Nbit_mux2x1.tcl -notrace

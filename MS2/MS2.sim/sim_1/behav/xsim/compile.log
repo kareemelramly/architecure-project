@@ -8,16 +8,12 @@ INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project
 INFO: [VRFC 10-311] analyzing module ImmGen
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/InstMem.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module InstMem
-INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/N-bit-shift.v" into library xil_defaultlib
-INFO: [VRFC 10-311] analyzing module Nbit_shift_left
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/N_bit_register.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module DFlipFlop
 INFO: [VRFC 10-311] analyzing module mux2x1
 INFO: [VRFC 10-311] analyzing module N_bit_register
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/Nbit_decoder.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module Nbit_decoder
-INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/Nbit_mux2x1.v" into library xil_defaultlib
-INFO: [VRFC 10-311] analyzing module Nbit_mux2x1
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/Nbit_register_file.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module RegFile
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/alu_unit.v" into library xil_defaultlib
@@ -28,3 +24,6 @@ INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project
 INFO: [VRFC 10-311] analyzing module datapath
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/datapath_tb.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module datapath_tb
+WARNING: [VRFC 10-3248] data object 'cu_memToReg' is already declared [C:/Users/Mou_45/architecure-project/datapath_tb.v:15]
+WARNING: [VRFC 10-9364] second declaration of 'cu_memToReg' is ignored [C:/Users/Mou_45/architecure-project/datapath_tb.v:15]
+WARNING: [VRFC 10-3029] 'cu_memToReg' was previously declared without a range [C:/Users/Mou_45/architecure-project/datapath_tb.v:15]

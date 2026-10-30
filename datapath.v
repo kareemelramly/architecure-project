@@ -28,11 +28,15 @@ module datapath(input clk, input reset);
 
     // Submodules
     DataMem DataMemory(
-        clk, memRead, memWrite, AluOutput[7:2], readData2, data_memory_out
+        .clk(clk), .MemRead(memRead), .MemWrite(memWrite),
+        .funct3(inst_memory_out[14:12]),
+        .addr(AluOutput[7:0]),
+        .data_in(readData2),
+        .data_out(data_memory_out)
     );
 
     InstMem InstructionMemory(
-        pcValue[7:2], inst_memory_out
+        pcValue[8:2], inst_memory_out
     );
 
     RegFile #(32) RegisterFile(

@@ -58,55 +58,47 @@ Time | PC (Byte) | WordIdx | Instruction | Funct3 | MemRd | MemWr | Halt | AluOu
              1080000 |    236    |   59    |  0060ef13  |  110   |   0   |   0   |  0   |    14
              1100000 |    240    |   60    |  00409e93  |  001   |   0   |   0   |  0   |    160
              1120000 |    244    |   61    |  01f19f93  |  001   |   0   |   0   |  0   |    2147483648
+             1140000 |    248    |   62    |  ffb0a093  |  010   |   0   |   0   |  0   |    0
+             1160000 |    252    |   63    |  00a1b113  |  011   |   0   |   0   |  0   |    0
+             1180000 |    256    |    0    |  0041d193  |  101   |   0   |   0   |  0   |    268435455
+             1200000 |    260    |    1    |  4020d213  |  101   |   0   |   0   |  0   |    0
+             1220000 |    264    |    2    |  123452b7  |  101   |   0   |   0   |  0   |    268435633
+             1240000 |    268    |    3    |  00002317  |  010   |   0   |   0   |  0   |    8460
+             1260000 |    272    |    4    |  114003e7  |  000   |   0   |   0   |  0   |    1
 =====================================================================================
-Cycles until halt : 56
---- Branch tests (existing) ---
-  [ OK ]  Score (DataMem[3], Expected 70) : 0x00000046
-  [ OK ] p Count (DataMem[4], Expected 0) : 0x00000000
+Cycles until halt : 63
+--- Branch tests ---
+  [ OK ]  Score (DataMem[3], Expected 70) : 0x00000046 (70)
+  [ OK ] p Count (DataMem[4], Expected 0) : 0x00000000 (0)
 --- LB / LBU / LH / LHU ---
-  [ OK ] lb  x6  (byte 0 = 0xB2) : 0xffffffb2
-  [ OK ] lb  x7  (byte 3 = 0x7C) : 0x0000007c
-  [ OK ] lbu x8  (byte 0 = 0xB2) : 0x000000b2
-  [ OK ] lbu x9  (byte 1 = 0xF1) : 0x000000f1
-  [ OK ] lh  x10 (half 0 = 0xF1B2) : 0xfffff1b2
-  [ OK ] lh  x11 (half 1 = 0x7C8A) : 0x00007c8a
-  [ OK ] lhu x12 (half 0 = 0xF1B2) : 0x0000f1b2
-  [ OK ] lhu x13 (half 1 = 0x7C8A) : 0x00007c8a
+  [ OK ] lb  x6  (byte 0 = 0xB2) : 0xffffffb2 (-78)
+  [ OK ] lb  x7  (byte 3 = 0x7C) : 0x0000007c (124)
+  [ OK ] lbu x8  (byte 0 = 0xB2) : 0x000000b2 (178)
+  [ OK ] lbu x9  (byte 1 = 0xF1) : 0x000000f1 (241)
+  [ OK ] lh  x10 (half 0 = 0xF1B2) : 0xfffff1b2 (-3662)
+  [ OK ] lh  x11 (half 1 = 0x7C8A) : 0x00007c8a (31882)
+  [ OK ] lhu x12 (half 0 = 0xF1B2) : 0x0000f1b2 (61874)
+  [ OK ] lhu x13 (half 1 = 0x7C8A) : 0x00007c8a (31882)
 --- SB / SH ---
-  [ OK ] DataMem[6] after 4x sb : 0x0afb140a
-  [ OK ] DataMem[7] after 2x sh : 0x0014fffb
-  [ OK ] lw x14 reads back sb word : 0x0afb140a
-  [ OK ] lw x15 reads back sh word : 0x0014fffb
-  [ OK ] DataMem[5] untouched : 0x7c8af1b2
---- FENCE / FENCE.TSO / PAUSE / ECALL ---
-  [ OK ] add after fences (x16 = 30) : 0x0000001e
-  [ OK ] sw x16 (DataMem[8] = 30) : 0x0000001e
-  [ OK ] xor execution (x17 = 30) : 0x0000001e
-  [ OK ] x1 unchanged by fences : 0x0000000a
-  [ OK ] x0 still zero : 0x00000000
-  [ OK ] ter ECALL not executed (x18 = 0) : 0x00000000
---- SLL / SLT / SLTU / SRL / SRA ---
-  [ OK ] sll  x19 (10 << 20) : 0x00a00000
-  [ OK ] slt  x20 (-5 < 10 signed) : 0x00000001
-  [ OK ] sltu x21 (0xFFFFFFFB < 10) : 0x00000000
-  [ OK ] srl  x23 (logical >> 10) : 0x003fffff
-  [ OK ] sra  x24 (arithmetic >>> 10) : 0xffffffff
---- OP-IMM: addi / xori / ori / andi / slli ---
-  [ OK ] sltu x22 (10 < 0xFFFFFFFB) : 0x00000001
-  [ OK ] addi x25 (10 + 5) : 0x0000000f
-  [ OK ] addi x26 (10 + -3) : 0x00000007
-  [ OK ] xori x27 (10 ^ 15) : 0x00000005
-  [ OK ] andi x28 (10 & 6) : 0x00000002
-  [ OK ] ori  x30 (10 | 6) : 0x0000000e
-  [ OK ] slli x29 (10 << 4) : 0x000000a0
-  [ OK ] slli x31 (-5 << 31) : 0x80000000
-  [ OK ] PC frozen on ECALL (byte 248) : 0x000000f8
-  [ OK ] ter ECALL not executed (x18 = 0) : 0x00000000
---- Control unit decode ---
-  [ OK ] FENCE decode : no reg/mem/branch side effects, halt=0
-  [ OK ] FENCE.TSO decode : no reg/mem/branch side effects, halt=0
-  [ OK ] PAUSE decode : no reg/mem/branch side effects, halt=0
-  [ OK ] ECALL decode : no reg/mem/branch side effects, halt=1
-  [ OK ] EBREAK decode : no reg/mem/branch side effects, halt=1
-  [ OK ] CSRRW (not ECALL/EBREAK) decode : no reg/mem/branch side effects, halt=0
-===========================================================================
+  [ OK ] DataMem[6] after 4x sb : 0x0afb140a (184226826)
+  [ OK ] DataMem[7] after 2x sh : 0x0014fffb (1376251)
+  [ OK ] lw x14 reads back sb word : 0x0afb140a (184226826)
+  [ OK ] lw x15 reads back sh word : 0x0014fffb (1376251)
+  [ OK ] DataMem[5] untouched : 0x7c8af1b2 (2089480626)
+--- FENCE / FENCE.TSO / PAUSE ---
+  [ OK ] add after fences (x16 = 30) : 0x0000001e (30)
+  [ OK ] sw x16 (DataMem[8] = 30) : 0x0000001e (30)
+  [ OK ] xor execution (x17 = 30) : 0x0000001e (30)
+--- R-Type Operations ---
+  [ OK ] sll  x19 (10 << 20) : 0x00a00000 (10485760)
+  [ OK ] slt  x20 (-5 < 10 signed) : 0x00000001 (1)
+  [ OK ] sltu x21 (0xFFFFFFFB < 10) : 0x00000000 (0)
+  [ OK ] sltu x22 (10 < 0xFFFFFFFB) : 0x00000001 (1)
+  [ OK ] srl  x23 (logical >> 10) : 0x003fffff (4194303)
+  [ OK ] sra  x24 (arithmetic >>> 10) : 0xffffffff (-1)
+--- OP-IMM (I-Type Arithmetic / Logical / Immediate Shifts) ---
+  [ OK ] addi x25 (10 + 5) : 0x0000000f (15)
+  [ OK ] addi x26 (10 + -3) : 0x00000007 (7)
+  [ OK ] xori x27 (10 ^ 15) : 0x00000005 (5)
+  [ OK ] andi x28 (10 & 6) : 0x00000002 (2)
+  [ OK ] 

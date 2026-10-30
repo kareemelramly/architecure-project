@@ -96,7 +96,7 @@ module control_unit(
             end
           
             // SYSTEM opcode: ECALL (imm=0) and EBREAK (imm=1) stop the PC, any other SYSTEM encoding is a NOP
-            b11100: begin
+            5'b11100: begin
                 if (inst[14:12]==3'b000 && inst[11:7]==5'b00000 && inst[19:15]==5'b00000 && inst[31:21]==11'b0)
                   halt = 1'b1;
             end

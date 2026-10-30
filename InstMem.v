@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
-module InstMem (input [5:0] addr, output [31:0] data_out);
-reg [31:0] mem [0:63];
+module InstMem (input [6:0] addr, output [31:0] data_out);
+reg [31:0] mem [0:127];
 integer i;
 initial begin
         for (i = 0; i < 64; i = i + 1) mem[i] = 32'd0;
@@ -91,8 +91,17 @@ initial begin
         mem[59] = 32'b000000000110_00001_110_11110_0010011;  // ori  x30, x1, 6   -> 14
         mem[60] = 32'b0000000_00100_00001_001_11101_0010011; // slli x29, x1, 4  -> 10 << 4 = 160 (0xA0)
         mem[61] = 32'b0000000_11111_00011_001_11111_0010011; // slli x31, x3, 31 -> 0xFFFFFFFB << 31 = addr 
-        mem[62] = 32'b000000000000_00000_000_00000_1110011;  // ecall (byte 248)
-        mem[63] = 32'b0000000_00001_00001_000_10010_0110011; // add x18, x1, x1 -> must NOT addr 
+
+        // --- ADDITIONAL I-TYPE TESTS  ---
+        mem[62] = 32'b111111111011_00001_010_00001_0010011; // slti  x1, x1, -5  -> 10 < -5 signed = 0
+        mem[63] = 32'b000000001010_00011_011_00010_0010011; // sltiu x2, x3, 10  -> 0xFFFFFFFB < 10 unsigned = 0
+        mem[64] = 32'b0000000_00100_00011_101_00011_0010011; // srli  x3, x3, 4   -> 0xFFFFFFFB >> 4 = 0x0FFFFFFF
+        mem[65] = 32'b0100000_00010_00001_101_00100_0010011; // srai  x4, x1, 2   -> arithmetic shift right
+        mem[66] = 32'b00010010001101000101_00101_0110111; // lui   x5, 0x12345 -> x5 = 0x12345000
+        mem[67] = 32'b00000000000000000010_00110_0010111; // auipc x6, 0x2     -> x6 = PC + 0x2000
+        mem[68] = 32'b000100010100_00000_000_00111_1100111; // jalr x7, 276(x0)
+        mem[69] = 32'b000000000000_00000_000_00000_1110011; // ecall (byte 276)
+        mem[70] = 32'b0000000_00001_00001_000_10010_0110011; // add x18, x1, x1 -> must NOT exec
     end
 assign data_out = mem[addr];
 endmodule
