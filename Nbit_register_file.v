@@ -33,7 +33,7 @@ genvar i;
 generate
 for(i = 0; i < 32; i = i+1)
 begin: Gen_Modules
-N_bit_register  #(N) uut2(regwrite & choice[i], clk, rst, writedata, D[i]); 
+N_bit_register  #(N) uut2(regwrite & choice[i] & (i != 0), clk, rst, writedata, D[i]);
 end
 endgenerate
 assign readdata1 = (readreg1 == 5'd0) ? {N{1'b0}} : D[readreg1];

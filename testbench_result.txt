@@ -1,0 +1,270 @@
+=====================================================================================
+Time | PC (Byte) | WordIdx | Instruction | Funct3 | MemRd | MemWr | Halt | AluOutput
+=====================================================================================
+20000 |      0    |    0    |  00002083  |  010   |   1   |   0   |  0   |    0
+  [ OK ] lw x1, 0(x0) next PC : 0x00000004 (4)
+  [ OK ] lw x1, 0(x0) result : 0x0000000a (10)
+40000 |      4    |    1    |  00402103  |  010   |   1   |   0   |  0   |    4
+  [ OK ] lw x2, 4(x0) next PC : 0x00000008 (8)
+  [ OK ] lw x2, 4(x0) result : 0x00000014 (20)
+60000 |      8    |    2    |  00802183  |  010   |   1   |   0   |  0   |    8
+  [ OK ] lw x3, 8(x0) next PC : 0x0000000c (12)
+  [ OK ] lw x3, 8(x0) result : 0xfffffffb (-5)
+80000 |     12    |    3    |  00000233  |  000   |   0   |   0   |  0   |    0
+  [ OK ] add clear score/trap next PC : 0x00000010 (16)
+  [ OK ] add clear score/trap result : 0x00000000 (0)
+100000 |     16    |    4    |  000002b3  |  000   |   0   |   0   |  0   |    0
+  [ OK ] add clear score/trap next PC : 0x00000014 (20)
+  [ OK ] add clear score/trap result : 0x00000000 (0)
+120000 |     20    |    5    |  00108463  |  000   |   0   |   0   |  0   |    0
+  [ OK ] beq taken next PC : 0x0000001c (28)
+140000 |     28    |    7    |  00120233  |  000   |   0   |   0   |  0   |    10
+  [ OK ] add branch pass score next PC : 0x00000020 (32)
+  [ OK ] add branch pass score result : 0x0000000a (10)
+160000 |     32    |    8    |  00209463  |  001   |   0   |   0   |  0   |    4294967286
+  [ OK ] bne taken next PC : 0x00000028 (40)
+180000 |     40    |   10    |  00120233  |  000   |   0   |   0   |  0   |    20
+  [ OK ] add branch pass score next PC : 0x0000002c (44)
+  [ OK ] add branch pass score result : 0x00000014 (20)
+200000 |     44    |   11    |  0011c463  |  100   |   0   |   0   |  0   |    4294967281
+  [ OK ] blt taken next PC : 0x00000034 (52)
+220000 |     52    |   13    |  00120233  |  000   |   0   |   0   |  0   |    30
+  [ OK ] add branch pass score next PC : 0x00000038 (56)
+  [ OK ] add branch pass score result : 0x0000001e (30)
+240000 |     56    |   14    |  0030d463  |  101   |   0   |   0   |  0   |    15
+  [ OK ] bge taken next PC : 0x00000040 (64)
+260000 |     64    |   16    |  00120233  |  000   |   0   |   0   |  0   |    40
+  [ OK ] add branch pass score next PC : 0x00000044 (68)
+  [ OK ] add branch pass score result : 0x00000028 (40)
+280000 |     68    |   17    |  0030e463  |  110   |   0   |   0   |  0   |    15
+  [ OK ] bltu taken next PC : 0x0000004c (76)
+300000 |     76    |   19    |  00120233  |  000   |   0   |   0   |  0   |    50
+  [ OK ] add branch pass score next PC : 0x00000050 (80)
+  [ OK ] add branch pass score result : 0x00000032 (50)
+320000 |     80    |   20    |  0021f463  |  111   |   0   |   0   |  0   |    4294967271
+  [ OK ] bgeu taken next PC : 0x00000058 (88)
+340000 |     88    |   22    |  00120233  |  000   |   0   |   0   |  0   |    60
+  [ OK ] add branch pass score next PC : 0x0000005c (92)
+  [ OK ] add branch pass score result : 0x0000003c (60)
+360000 |     92    |   23    |  0011e463  |  110   |   0   |   0   |  0   |    4294967281
+  [ OK ] bltu not taken next PC : 0x00000060 (96)
+380000 |     96    |   24    |  00120233  |  000   |   0   |   0   |  0   |    70
+  [ OK ] add branch pass score next PC : 0x00000064 (100)
+  [ OK ] add branch pass score result : 0x00000046 (70)
+400000 |    100    |   25    |  00402623  |  010   |   0   |   1   |  0   |    12
+  [ OK ] sw pass score next PC : 0x00000068 (104)
+  [ OK ] sw pass score result : 0x00000046 (70)
+420000 |    104    |   26    |  00502823  |  010   |   0   |   1   |  0   |    16
+  [ OK ] sw trap count next PC : 0x0000006c (108)
+  [ OK ] sw trap count result : 0x00000000 (0)
+440000 |    108    |   27    |  01400303  |  000   |   1   |   0   |  0   |    20
+  [ OK ] lb negative byte next PC : 0x00000070 (112)
+  [ OK ] lb negative byte result : 0xffffffb2 (-78)
+460000 |    112    |   28    |  01700383  |  000   |   1   |   0   |  0   |    23
+  [ OK ] lb positive byte next PC : 0x00000074 (116)
+  [ OK ] lb positive byte result : 0x0000007c (124)
+480000 |    116    |   29    |  01404403  |  100   |   1   |   0   |  0   |    20
+  [ OK ] lbu byte 0 next PC : 0x00000078 (120)
+  [ OK ] lbu byte 0 result : 0x000000b2 (178)
+500000 |    120    |   30    |  01504483  |  100   |   1   |   0   |  0   |    21
+  [ OK ] lbu byte 1 next PC : 0x0000007c (124)
+  [ OK ] lbu byte 1 result : 0x000000f1 (241)
+520000 |    124    |   31    |  01401503  |  001   |   1   |   0   |  0   |    20
+  [ OK ] lh negative half next PC : 0x00000080 (128)
+  [ OK ] lh negative half result : 0xfffff1b2 (-3662)
+540000 |    128    |   32    |  01601583  |  001   |   1   |   0   |  0   |    22
+  [ OK ] lh positive half next PC : 0x00000084 (132)
+  [ OK ] lh positive half result : 0x00007c8a (31882)
+560000 |    132    |   33    |  01405603  |  101   |   1   |   0   |  0   |    20
+  [ OK ] lhu half 0 next PC : 0x00000088 (136)
+  [ OK ] lhu half 0 result : 0x0000f1b2 (61874)
+580000 |    136    |   34    |  01605683  |  101   |   1   |   0   |  0   |    22
+  [ OK ] lhu half 1 next PC : 0x0000008c (140)
+  [ OK ] lhu half 1 result : 0x00007c8a (31882)
+600000 |    140    |   35    |  00100c23  |  000   |   0   |   1   |  0   |    24
+  [ OK ] sb byte 0 next PC : 0x00000090 (144)
+  [ OK ] sb byte 0 result : 0x0000000a (10)
+620000 |    144    |   36    |  00200ca3  |  000   |   0   |   1   |  0   |    25
+  [ OK ] sb byte 1 next PC : 0x00000094 (148)
+  [ OK ] sb byte 1 result : 0x0000140a (5130)
+640000 |    148    |   37    |  00300d23  |  000   |   0   |   1   |  0   |    26
+  [ OK ] sb byte 2 next PC : 0x00000098 (152)
+  [ OK ] sb byte 2 result : 0x00fb140a (16454666)
+660000 |    152    |   38    |  00100da3  |  000   |   0   |   1   |  0   |    27
+  [ OK ] sb byte 3 next PC : 0x0000009c (156)
+  [ OK ] sb byte 3 result : 0x0afb140a (184226826)
+680000 |    156    |   39    |  00301e23  |  001   |   0   |   1   |  0   |    28
+  [ OK ] sh half 0 next PC : 0x000000a0 (160)
+  [ OK ] sh half 0 result : 0x0000fffb (65531)
+700000 |    160    |   40    |  00201f23  |  001   |   0   |   1   |  0   |    30
+  [ OK ] sh half 1 next PC : 0x000000a4 (164)
+  [ OK ] sh half 1 result : 0x0014fffb (1376251)
+720000 |    164    |   41    |  01802703  |  010   |   1   |   0   |  0   |    24
+  [ OK ] lw sb result next PC : 0x000000a8 (168)
+  [ OK ] lw sb result result : 0x0afb140a (184226826)
+740000 |    168    |   42    |  01c02783  |  010   |   1   |   0   |  0   |    28
+  [ OK ] lw sh result next PC : 0x000000ac (172)
+  [ OK ] lw sh result result : 0x0014fffb (1376251)
+760000 |    172    |   43    |  0ff0000f  |  000   |   0   |   0   |  0   |    0
+  [ OK ] FENCE next PC : 0x000000b0 (176)
+780000 |    176    |   44    |  8330000f  |  000   |   0   |   0   |  0   |    0
+  [ OK ] FENCE.TSO next PC : 0x000000b4 (180)
+800000 |    180    |   45    |  0100000f  |  000   |   0   |   0   |  0   |    0
+  [ OK ] PAUSE next PC : 0x000000b8 (184)
+820000 |    184    |   46    |  00208833  |  000   |   0   |   0   |  0   |    30
+  [ OK ] add x16, x1, x2 next PC : 0x000000bc (188)
+  [ OK ] add x16, x1, x2 result : 0x0000001e (30)
+840000 |    188    |   47    |  03002023  |  010   |   0   |   1   |  0   |    32
+  [ OK ] sw x16, 32(x0) next PC : 0x000000c0 (192)
+  [ OK ] sw x16, 32(x0) result : 0x0000001e (30)
+860000 |    192    |   48    |  0020c8b3  |  100   |   0   |   0   |  0   |    30
+  [ OK ] xor next PC : 0x000000c4 (196)
+  [ OK ] xor result : 0x0000001e (30)
+880000 |    196    |   49    |  002099b3  |  001   |   0   |   0   |  0   |    10485760
+  [ OK ] sll next PC : 0x000000c8 (200)
+  [ OK ] sll result : 0x00a00000 (10485760)
+900000 |    200    |   50    |  0011aa33  |  010   |   0   |   0   |  0   |    1
+  [ OK ] slt next PC : 0x000000cc (204)
+  [ OK ] slt result : 0x00000001 (1)
+920000 |    204    |   51    |  0011bab3  |  011   |   0   |   0   |  0   |    0
+  [ OK ] sltu false next PC : 0x000000d0 (208)
+  [ OK ] sltu false result : 0x00000000 (0)
+940000 |    208    |   52    |  0011dbb3  |  101   |   0   |   0   |  0   |    4194303
+  [ OK ] srl next PC : 0x000000d4 (212)
+  [ OK ] srl result : 0x003fffff (4194303)
+960000 |    212    |   53    |  4011dc33  |  101   |   0   |   0   |  0   |    4294967295
+  [ OK ] sra next PC : 0x000000d8 (216)
+  [ OK ] sra result : 0xffffffff (-1)
+980000 |    216    |   54    |  0030bb33  |  011   |   0   |   0   |  0   |    1
+  [ OK ] sltu true next PC : 0x000000dc (220)
+  [ OK ] sltu true result : 0x00000001 (1)
+1000000 |    220    |   55    |  00508c93  |  000   |   0   |   0   |  0   |    15
+  [ OK ] addi positive next PC : 0x000000e0 (224)
+  [ OK ] addi positive result : 0x0000000f (15)
+1020000 |    224    |   56    |  ffd08d13  |  000   |   0   |   0   |  0   |    7
+  [ OK ] addi negative next PC : 0x000000e4 (228)
+  [ OK ] addi negative result : 0x00000007 (7)
+1040000 |    228    |   57    |  00f0cd93  |  100   |   0   |   0   |  0   |    5
+  [ OK ] xori next PC : 0x000000e8 (232)
+  [ OK ] xori result : 0x00000005 (5)
+1060000 |    232    |   58    |  0060fe13  |  111   |   0   |   0   |  0   |    2
+  [ OK ] andi next PC : 0x000000ec (236)
+  [ OK ] andi result : 0x00000002 (2)
+1080000 |    236    |   59    |  0060ef13  |  110   |   0   |   0   |  0   |    14
+  [ OK ] ori next PC : 0x000000f0 (240)
+  [ OK ] ori result : 0x0000000e (14)
+1100000 |    240    |   60    |  00409e93  |  001   |   0   |   0   |  0   |    160
+  [ OK ] slli by 4 next PC : 0x000000f4 (244)
+  [ OK ] slli by 4 result : 0x000000a0 (160)
+1120000 |    244    |   61    |  01f19f93  |  001   |   0   |   0   |  0   |    2147483648
+  [ OK ] slli by 31 next PC : 0x000000f8 (248)
+  [ OK ] slli by 31 result : 0x80000000 (-2147483648)
+1140000 |    248    |   62    |  ffb0a093  |  010   |   0   |   0   |  0   |    0
+  [ OK ] slti next PC : 0x000000fc (252)
+  [ OK ] slti result : 0x00000000 (0)
+1160000 |    252    |   63    |  00a1b113  |  011   |   0   |   0   |  0   |    0
+  [ OK ] sltiu next PC : 0x00000100 (256)
+  [ OK ] sltiu result : 0x00000000 (0)
+1180000 |    256    |   64    |  0041d193  |  101   |   0   |   0   |  0   |    268435455
+  [ OK ] srli next PC : 0x00000104 (260)
+  [ OK ] srli result : 0x0fffffff (268435455)
+1200000 |    260    |   65    |  4020d213  |  101   |   0   |   0   |  0   |    0
+  [ OK ] srai next PC : 0x00000108 (264)
+  [ OK ] srai result : 0x00000000 (0)
+1220000 |    264    |   66    |  123452b7  |  101   |   0   |   0   |  0   |    268435633
+  [ OK ] lui next PC : 0x0000010c (268)
+  [ OK ] lui result : 0x12345000 (305418240)
+1240000 |    268    |   67    |  00002317  |  010   |   0   |   0   |  0   |    8460
+  [ OK ] auipc next PC : 0x00000110 (272)
+  [ OK ] auipc result : 0x0000210c (8460)
+1260000 |    272    |   68    |  114003e7  |  000   |   0   |   0   |  0   |    1
+  [ OK ] jalr next PC : 0x00000114 (276)
+  [ OK ] jalr result : 0x00000114 (276)
+1280000 |    276    |   69    |  41ac8933  |  000   |   0   |   0   |  0   |    8
+  [ OK ] sub next PC : 0x00000118 (280)
+  [ OK ] sub result : 0x00000008 (8)
+1300000 |    280    |   70    |  01acfb33  |  111   |   0   |   0   |  0   |    7
+  [ OK ] and next PC : 0x0000011c (284)
+  [ OK ] and result : 0x00000007 (7)
+1320000 |    284    |   71    |  01acea33  |  110   |   0   |   0   |  0   |    15
+  [ OK ] or next PC : 0x00000120 (288)
+  [ OK ] or result : 0x0000000f (15)
+1340000 |    288    |   72    |  008000ef  |  000   |   0   |   0   |  0   |    178
+  [ OK ] jal link and skip next PC : 0x00000128 (296)
+  [ OK ] jal link and skip result : 0x00000124 (292)
+1360000 |    296    |   74    |  0040006f  |  000   |   0   |   0   |  0   |    0
+  [ OK ] jal x0 skip next PC : 0x0000012c (300)
+  [ OK ] jal x0 skip result : 0x00000000 (0)
+  [ OK ] ECALL halt before timeout : 0x00000001 (1)
+=====================================================================================
+Cycles until halt : 68
+--- Branch tests ---
+  [ OK ] Pass Score (DataMem[3], Expected 70) : 0x00000046 (70)
+  [ OK ] Trap Count (DataMem[4], Expected 0) : 0x00000000 (0)
+--- LB / LBU / LH / LHU ---
+  [ OK ] lb  x6  (byte 0 = 0xB2) : 0xffffffb2 (-78)
+  [ OK ] lb  x7  (byte 3 = 0x7C) : 0x0000007c (124)
+  [ OK ] lbu x8  (byte 0 = 0xB2) : 0x000000b2 (178)
+  [ OK ] lbu x9  (byte 1 = 0xF1) : 0x000000f1 (241)
+  [ OK ] lh  x10 (half 0 = 0xF1B2) : 0xfffff1b2 (-3662)
+  [ OK ] lh  x11 (half 1 = 0x7C8A) : 0x00007c8a (31882)
+  [ OK ] lhu x12 (half 0 = 0xF1B2) : 0x0000f1b2 (61874)
+  [ OK ] lhu x13 (half 1 = 0x7C8A) : 0x00007c8a (31882)
+--- SB / SH ---
+  [ OK ] DataMem[6] after 4x sb : 0x0afb140a (184226826)
+  [ OK ] DataMem[7] after 2x sh : 0x0014fffb (1376251)
+  [ OK ] lw x14 reads back sb word : 0x0afb140a (184226826)
+  [ OK ] lw x15 reads back sh word : 0x0014fffb (1376251)
+  [ OK ] DataMem[5] untouched : 0x7c8af1b2 (2089480626)
+--- FENCE / FENCE.TSO / PAUSE ---
+  [ OK ] add after fences (x16 = 30) : 0x0000001e (30)
+  [ OK ] sw x16 (DataMem[8] = 30) : 0x0000001e (30)
+  [ OK ] xor execution (x17 = 30) : 0x0000001e (30)
+--- R-Type Operations ---
+  [ OK ] sll  x19 (10 << 20) : 0x00a00000 (10485760)
+  [ OK ] slt  x20 (-5 < 10 signed) : 0x00000001 (1)
+  [ OK ] sltu x21 (0xFFFFFFFB < 10) : 0x00000000 (0)
+  [ OK ] sltu x22 (10 < 0xFFFFFFFB) : 0x00000001 (1)
+  [ OK ] srl  x23 (logical >> 10) : 0x003fffff (4194303)
+  [ OK ] sra  x24 (arithmetic >>> 10) : 0xffffffff (-1)
+--- OP-IMM (I-Type Arithmetic / Logical / Immediate Shifts) ---
+  [ OK ] addi x25 (10 + 5) : 0x0000000f (15)
+  [ OK ] addi x26 (10 + -3) : 0x00000007 (7)
+  [ OK ] xori x27 (10 ^ 15) : 0x00000005 (5)
+  [ OK ] andi x28 (10 & 6) : 0x00000002 (2)
+  [ OK ] ori  x30 (10 | 6) : 0x0000000e (14)
+  [ OK ] slli x29 (10 << 4) : 0x000000a0 (160)
+  [ OK ] slli x31 (-5 << 31) : 0x80000000 (-2147483648)
+--- Appended I-Type / Upper-Immediate / JALR Tests ---
+  [ OK ] slti  x1 (10 < -5 signed) : 0x00000000 (0)
+  [ OK ] sltiu x2 (-5 < 10 unsigned) : 0x00000000 (0)
+  [ OK ] srli  x3 (-5 >> 4 logical) : 0x0fffffff (268435455)
+  [ OK ] srai  x4 (0 >>> 2) : 0x00000000 (0)
+  [ OK ] lui   x5 (0x12345 << 12) : 0x12345000 (305418240)
+  [ OK ] auipc x6 (PC + 0x2000) : 0x0000210c (8460)
+  [ OK ] jalr  x7 link register : 0x00000114 (276)
+--- Additional R-Type / JAL Tests ---
+  [ OK ] sub x18 (15 - 7) : 0x00000008 (8)
+  [ OK ] and x22 (15 & 7) : 0x00000007 (7)
+  [ OK ] or x20 (15 | 7) : 0x0000000f (15)
+  [ OK ] jal x1 link register : 0x00000124 (292)
+  [ OK ] jal x0 keeps x0 zero : 0x00000000 (0)
+--- ECALL / Execution Bounds ---
+  [ OK ] PC frozen on ECALL (byte 300) : 0x0000012c (300)
+  [ OK ] add after ECALL not executed (x18 = 8) : 0x00000008 (8)
+  [ OK ] x0 still zero : 0x00000000 (0)
+--- Control unit decode ---
+  [ OK ] FENCE decode : no reg/mem/branch side effects, halt=0
+  [ OK ] FENCE.TSO decode : no reg/mem/branch side effects, halt=0
+  [ OK ] PAUSE decode : no reg/mem/branch side effects, halt=0
+  [ OK ] ECALL decode : no reg/mem/branch side effects, halt=1
+  [ OK ] EBREAK decode : no reg/mem/branch side effects, halt=1
+  [ OK ] CSRRW (not ECALL/EBREAK) decode : no reg/mem/branch side effects, halt=0
+  [ OK ] EBREAK halt : 0x00000001 (1)
+  [ OK ] PC frozen on EBREAK : 0x00000000 (0)
+  [ OK ] EBREAK has no register write : 0x00000000 (0)
+  [ OK ] RV32I coverage [31:0] : 0xffffffff (-1)
+  [ OK ] RV32I coverage [39:32] : 0x000000ff (255)
+=====================================================================================
+>>> SIMULATION PASSED: All 40 RV32I instructions checked! <<<
+=====================================================================================
