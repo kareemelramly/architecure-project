@@ -7,7 +7,8 @@ module datapath_tb();
     integer cycles;
     // RV32I: LUI/AUIPC/JAL/JALR [0:3], branches [4:9], loads [10:14],
     // stores [15:17], OP-IMM [18:26], OP [27:36], FENCE/ECALL/EBREAK [37:39].
-    reg [39:0] covered;
+    // RV32M [40:47]: MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU (index 40 + funct3).
+    reg [47:0] covered;
     reg monitor_program;
     integer word_index;
     integer coverage_index;
@@ -70,7 +71,7 @@ module datapath_tb();
     initial begin
         errors = 0;
         cycles = 0;
-        covered = 40'b0;
+        covered = 48'b0;
         monitor_program = 1;
 
         // Apply reset
@@ -82,8 +83,8 @@ module datapath_tb();
         $display("Time | PC (Byte) | WordIdx | Instruction | Funct3 | MemRd | MemWr | Halt | AluOutput");
         $display("=====================================================================================");
 
-        // Run until ECALL halts the PC (increased timeout to 120 cycles to accommodate added instructions)
-        while (!CPU.halt && cycles < 120) begin
+        // Run until ECALL halts the PC (timeout of 250 cycles leaves room for the RV32I program + the RV32M block)
+        while (!CPU.halt && cycles < 250) begin
             @(posedge clk);
             #1;
             cycles = cycles + 1;
@@ -159,7 +160,7 @@ module datapath_tb();
         check("jal x0 keeps x0 zero", CPU.RegisterFile.D[0], 32'd0);
 
         $display("--- ECALL / Execution Bounds ---");
-        check("PC frozen on ECALL (byte 300)",          CPU.pcValue,            32'd300);
+        check("PC frozen on ECALL (byte 468)",          CPU.pcValue,            32'd468);
         check("add after ECALL not executed (x18 = 8)", CPU.RegisterFile.D[18], 32'd8);
         check("x0 still zero",                          CPU.RegisterFile.D[0],  32'd0);
 
@@ -187,10 +188,11 @@ module datapath_tb();
         covered[39] = 1'b1;
         check("RV32I coverage [31:0]", covered[31:0], 32'hFFFFFFFF);
         check("RV32I coverage [39:32]", {24'b0, covered[39:32]}, 32'h000000FF);
+        check("RV32M coverage [47:40]", {24'b0, covered[47:40]}, 32'h000000FF);
 
         $display("=====================================================================================");
         if (errors == 0)
-            $display(">>> SIMULATION PASSED: All 40 RV32I instructions checked! <<<");
+            $display(">>> SIMULATION PASSED: All 40 RV32I + 8 RV32M instructions checked! <<<");
         else
             $display(">>> SIMULATION FAILED: %0d check(s) failed, check waveform! <<<", errors);
         $display("=====================================================================================");
@@ -277,6 +279,49 @@ module datapath_tb();
                 71: begin instruction_name = "or next PC"; coverage_index = 35; expected_result = 32'h0000000F; end
                 72: begin instruction_name = "jal link and skip next PC"; coverage_index = 2; expected_result = 32'h00000124; expected_pc = 32'd296; end
                 74: begin instruction_name = "jal x0 skip next PC"; coverage_index = 2; expected_result = 32'h00000000; expected_pc = 32'd300; end
+                // ---- RV32M block (mem[75]..mem[116]) ----
+                75: begin instruction_name = "addi x2 (A) next PC"; coverage_index = -1; expected_result = 32'hFFFFFFFF; end
+                76: begin instruction_name = "addi x4 (B) next PC"; coverage_index = -1; expected_result = 32'hFFFFFFFF; end
+                77: begin instruction_name = "mul (-1,-1) next PC"; coverage_index = 40; expected_result = 32'h00000001; end
+                78: begin instruction_name = "mulh (-1,-1) next PC"; coverage_index = 41; expected_result = 32'h00000000; end
+                79: begin instruction_name = "mulhsu (-1,-1) next PC"; coverage_index = 42; expected_result = 32'hFFFFFFFF; end
+                80: begin instruction_name = "mulhu (-1,-1) next PC"; coverage_index = 43; expected_result = 32'hFFFFFFFE; end
+                81: begin instruction_name = "div (-1,-1) next PC"; coverage_index = 44; expected_result = 32'h00000001; end
+                82: begin instruction_name = "divu (-1,-1) next PC"; coverage_index = 45; expected_result = 32'h00000001; end
+                83: begin instruction_name = "rem (-1,-1) next PC"; coverage_index = 46; expected_result = 32'h00000000; end
+                84: begin instruction_name = "remu (-1,-1) next PC"; coverage_index = 47; expected_result = 32'h00000000; end
+                85: begin instruction_name = "addi x2 (A) next PC"; coverage_index = -1; expected_result = 32'hFFFFFFEC; end
+                86: begin instruction_name = "addi x4 (B) next PC"; coverage_index = -1; expected_result = 32'h00000007; end
+                87: begin instruction_name = "mul (-20,7) next PC"; coverage_index = 40; expected_result = 32'hFFFFFF74; end
+                88: begin instruction_name = "mulh (-20,7) next PC"; coverage_index = 41; expected_result = 32'hFFFFFFFF; end
+                89: begin instruction_name = "mulhsu (-20,7) next PC"; coverage_index = 42; expected_result = 32'hFFFFFFFF; end
+                90: begin instruction_name = "mulhu (-20,7) next PC"; coverage_index = 43; expected_result = 32'h00000006; end
+                91: begin instruction_name = "div (-20,7) next PC"; coverage_index = 44; expected_result = 32'hFFFFFFFE; end
+                92: begin instruction_name = "divu (-20,7) next PC"; coverage_index = 45; expected_result = 32'h24924921; end
+                93: begin instruction_name = "rem (-20,7) next PC"; coverage_index = 46; expected_result = 32'hFFFFFFFA; end
+                94: begin instruction_name = "remu (-20,7) next PC"; coverage_index = 47; expected_result = 32'h00000005; end
+                95: begin instruction_name = "addi x4 (B) next PC"; coverage_index = -1; expected_result = 32'h00000000; end
+                96: begin instruction_name = "mul (-20,0) next PC"; coverage_index = 40; expected_result = 32'h00000000; end
+                97: begin instruction_name = "mulh (-20,0) next PC"; coverage_index = 41; expected_result = 32'h00000000; end
+                98: begin instruction_name = "mulhsu (-20,0) next PC"; coverage_index = 42; expected_result = 32'h00000000; end
+                99: begin instruction_name = "mulhu (-20,0) next PC"; coverage_index = 43; expected_result = 32'h00000000; end
+                100: begin instruction_name = "div (-20,0) next PC"; coverage_index = 44; expected_result = 32'hFFFFFFFF; end
+                101: begin instruction_name = "divu (-20,0) next PC"; coverage_index = 45; expected_result = 32'hFFFFFFFF; end
+                102: begin instruction_name = "rem (-20,0) next PC"; coverage_index = 46; expected_result = 32'hFFFFFFEC; end
+                103: begin instruction_name = "remu (-20,0) next PC"; coverage_index = 47; expected_result = 32'hFFFFFFEC; end
+                104: begin instruction_name = "lui x2 (A) next PC"; coverage_index = -1; expected_result = 32'h80000000; end
+                105: begin instruction_name = "addi x4 (B) next PC"; coverage_index = -1; expected_result = 32'hFFFFFFFF; end
+                106: begin instruction_name = "mul (INT_MIN,-1) next PC"; coverage_index = 40; expected_result = 32'h80000000; end
+                107: begin instruction_name = "mulh (INT_MIN,-1) next PC"; coverage_index = 41; expected_result = 32'h00000000; end
+                108: begin instruction_name = "mulhsu (INT_MIN,-1) next PC"; coverage_index = 42; expected_result = 32'h80000000; end
+                109: begin instruction_name = "mulhu (INT_MIN,-1) next PC"; coverage_index = 43; expected_result = 32'h7FFFFFFF; end
+                110: begin instruction_name = "div (INT_MIN,-1) next PC"; coverage_index = 44; expected_result = 32'h80000000; end
+                111: begin instruction_name = "divu (INT_MIN,-1) next PC"; coverage_index = 45; expected_result = 32'h00000000; end
+                112: begin instruction_name = "rem (INT_MIN,-1) next PC"; coverage_index = 46; expected_result = 32'h00000000; end
+                113: begin instruction_name = "remu (INT_MIN,-1) next PC"; coverage_index = 47; expected_result = 32'h80000000; end
+                114: begin instruction_name = "addi x2 (restore) next PC"; coverage_index = -1; expected_result = 32'h00000000; end
+                115: begin instruction_name = "addi x4 (restore) next PC"; coverage_index = -1; expected_result = 32'h00000000; end
+                116: begin instruction_name = "addi x21 (restore) next PC"; coverage_index = -1; expected_result = 32'h00000000; end
                 default: begin
                     errors = errors + 1;
                     $display("  [FAIL] Unexpected executed word index %0d", word_index);
@@ -343,6 +388,49 @@ module datapath_tb();
                 71: check("or result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[71][11:7]], expected_result);
                 72: check("jal link and skip result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[72][11:7]], expected_result);
                 74: check("jal x0 skip result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[74][11:7]], expected_result);
+                // ---- RV32M block ----
+                75: check("addi x2 (A) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[75][11:7]], expected_result);
+                76: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[76][11:7]], expected_result);
+                77: check("mul (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[77][11:7]], expected_result);
+                78: check("mulh (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[78][11:7]], expected_result);
+                79: check("mulhsu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[79][11:7]], expected_result);
+                80: check("mulhu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[80][11:7]], expected_result);
+                81: check("div (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[81][11:7]], expected_result);
+                82: check("divu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[82][11:7]], expected_result);
+                83: check("rem (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[83][11:7]], expected_result);
+                84: check("remu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[84][11:7]], expected_result);
+                85: check("addi x2 (A) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[85][11:7]], expected_result);
+                86: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[86][11:7]], expected_result);
+                87: check("mul (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[87][11:7]], expected_result);
+                88: check("mulh (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[88][11:7]], expected_result);
+                89: check("mulhsu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[89][11:7]], expected_result);
+                90: check("mulhu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[90][11:7]], expected_result);
+                91: check("div (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[91][11:7]], expected_result);
+                92: check("divu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[92][11:7]], expected_result);
+                93: check("rem (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[93][11:7]], expected_result);
+                94: check("remu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[94][11:7]], expected_result);
+                95: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[95][11:7]], expected_result);
+                96: check("mul (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[96][11:7]], expected_result);
+                97: check("mulh (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[97][11:7]], expected_result);
+                98: check("mulhsu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[98][11:7]], expected_result);
+                99: check("mulhu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[99][11:7]], expected_result);
+                100: check("div (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[100][11:7]], expected_result);
+                101: check("divu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[101][11:7]], expected_result);
+                102: check("rem (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[102][11:7]], expected_result);
+                103: check("remu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[103][11:7]], expected_result);
+                104: check("lui x2 (A) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[104][11:7]], expected_result);
+                105: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[105][11:7]], expected_result);
+                106: check("mul (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[106][11:7]], expected_result);
+                107: check("mulh (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[107][11:7]], expected_result);
+                108: check("mulhsu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[108][11:7]], expected_result);
+                109: check("mulhu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[109][11:7]], expected_result);
+                110: check("div (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[110][11:7]], expected_result);
+                111: check("divu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[111][11:7]], expected_result);
+                112: check("rem (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[112][11:7]], expected_result);
+                113: check("remu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[113][11:7]], expected_result);
+                114: check("addi x2 (restore) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[114][11:7]], expected_result);
+                115: check("addi x4 (restore) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[115][11:7]], expected_result);
+                116: check("addi x21 (restore) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[116][11:7]], expected_result);
             endcase
             if (coverage_index >= 0)
                 covered[coverage_index] = 1'b1;

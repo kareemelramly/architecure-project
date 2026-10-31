@@ -7,7 +7,7 @@ module datapath(input clk, input reset);
     wire [31:0] inst_memory_out;
     wire [31:0] AluOutput;
     wire [31:0] immGenOut;
-    wire [3:0] AluSel;
+    wire [4:0] AluSel;
     wire AluZero;
 
     // Control wires

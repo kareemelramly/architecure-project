@@ -24,6 +24,3 @@ INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project
 INFO: [VRFC 10-311] analyzing module datapath
 INFO: [VRFC 10-2263] Analyzing Verilog file "C:/Users/Mou_45/architecure-project/datapath_tb.v" into library xil_defaultlib
 INFO: [VRFC 10-311] analyzing module datapath_tb
-WARNING: [VRFC 10-3248] data object 'cu_memToReg' is already declared [C:/Users/Mou_45/architecure-project/datapath_tb.v:15]
-WARNING: [VRFC 10-9364] second declaration of 'cu_memToReg' is ignored [C:/Users/Mou_45/architecure-project/datapath_tb.v:15]
-WARNING: [VRFC 10-3029] 'cu_memToReg' was previously declared without a range [C:/Users/Mou_45/architecure-project/datapath_tb.v:15]
