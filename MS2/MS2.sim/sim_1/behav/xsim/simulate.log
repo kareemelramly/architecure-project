@@ -388,4 +388,14 @@ Cycles until halt : 110
   [ OK ] EBREAK decode : no reg/mem/branch side effects, halt=1
   [ OK ] CSRRW (not ECALL/EBREAK) decode : no reg/mem/branch side effects, halt=0
   [ OK ] EBREAK halt : 0x00000001 (1)
-  [ OK 
+  [ OK ] PC frozen on EBREAK : 0x00000000 (0)
+  [ OK ] EBREAK has no register write : 0x00000000 (0)
+  [ OK ] RV32I coverage [31:0] : 0xffffffff (-1)
+  [ OK ] RV32I coverage [39:32] : 0x000000ff (255)
+  [ OK ] RV32M coverage [47:40] : 0x000000ff (255)
+=====================================================================================
+>>> SIMULATION FAILED: 2 check(s) failed, check waveform! <<<
+=====================================================================================
+Fatal: Datapath checks failed
+Time: 2431 ns  Iteration: 0  Process: /datapath_tb/Initial71_1071  Scope: datapath_tb  File: C:/Users/Mou_45/architecure-project/datapath_tb.v Line: 201
+$finish called at time : 2431 ns
