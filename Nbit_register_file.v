@@ -30,8 +30,9 @@ wire [N-1:0] D [0:31];
 wire [31:0] choice;
 Nbit_decoder #(5) uut(writereg, choice);
 genvar i;
+assign D[0] = {N{1'b0}}; // x0 is always 0
 generate
-for(i = 0; i < 32; i = i+1)
+for(i = 1; i < 32; i = i+1)
 begin: Gen_Modules
 N_bit_register  #(N) uut2(regwrite & choice[i] & (i != 0), clk, rst, writedata, D[i]);
 end
