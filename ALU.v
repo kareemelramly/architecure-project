@@ -58,13 +58,25 @@ else if (aluSel == 5'b11100)
 else if (aluSel == 5'b11101) 
     result  = mul_uu[63:32] ; //MULHU
 else if (aluSel == 5'b11110)
-    result = $signed(in1) / $signed(in2); //DIV
+    if(in2 == 0)
+        result = 32'hFFFFFFFF; //DIV by zero returns -1
+    else
+        result = $signed(in1) / $signed(in2); //DIV
 else if (aluSel == 5'b11111)
-    result = in1 / in2; //DIVU
+    if(in2 == 0)
+        result = 32'hFFFFFFFF; //DIVU by zero returns -1
+    else
+        result = in1 / in2; //DIVU
 else if (aluSel == 5'b10110)
-    result = $signed(in1) % $signed(in2); //REM
+    if(in2 == 0)
+        result = in1; //REM by zero returns dividend
+    else
+        result = $signed(in1) % $signed(in2); //REM
 else if (aluSel == 5'b10111)
-    result = in1 % in2;   //REMU   
+    if(in2 == 0)
+        result = in1; //REMU by zero returns dividend
+    else
+        result = in1 % in2;   //REMU   
 else
     result = 0;
 end
