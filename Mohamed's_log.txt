@@ -1,0 +1,19 @@
+October 27, 4:00 PM: implemented conditional branch instructions.
+Created BranchUnit.v, integrated it into datapath.v, and updated DataMem.v, InstMem.v, and datapath_tb.v to simulate the branching validity.   
+October 30, 3:30 PM: supported LUI, AUIPC, JAL and JALR instructions.
+Modified ImmGen.v, control_unit.v, and datapath.v, and updated the memory and testbench files for validation.
+
+October 31, 2:15 PM: merged team branches and resolved conflicts.
+Integrated work from Kareem and Moustafa across ALU.v, DataMem.v, InstMem.v, alu_unit.v, control_unit.v, datapath.v, and datapath_tb.v, and commented out datapath_board.v.
+
+November 1, 11:00 PM: modified ALU Unit and hardwired x0 to 0.
+Handled code redundancies in the ALU control block and ensured register zero is strictly hardwired to 0.
+
+November 1, 11:15 PM: handled division by zero exception.
+Updated ALU.v to manage division exceptions, re-ran the testbench, and copied the results to testbench_result.txt.
+
+November 1, 11:30 PM: added block diagram.
+Created the .md file containing the Mermaid block diagram and pushed a picture of it to the repository. 
+
+November 2, 3:30 AM: refactored code
+Refactored the whole Verilog code to abide by the Coding Guidlines.
