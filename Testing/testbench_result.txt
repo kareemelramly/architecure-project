@@ -353,7 +353,7 @@ Cycles until halt : 110
   [ OK ] sltu x22 (10 < 0xFFFFFFFB) : 0x00000001 (1)
   [ OK ] srl  x23 (logical >> 10) : 0x003fffff (4194303)
   [ OK ] sra  x24 (arithmetic >>> 10) : 0xffffffff (-1)
---- OP-IMM (I-Type Arithmetic / Logical / Immediate Shifts) ---
+--- OP-IMM (I-Type Arithmetic / Logic / Shifts) ---
   [ OK ] addi x25 (10 + 5) : 0x0000000f (15)
   [ OK ] addi x26 (10 + -3) : 0x00000007 (7)
   [ OK ] xori x27 (10 ^ 15) : 0x00000005 (5)
@@ -380,12 +380,12 @@ Cycles until halt : 110
   [ OK ] add after ECALL not executed (x18 = 8) : 0x00000008 (8)
   [ OK ] x0 still zero : 0x00000000 (0)
 --- Control unit decode ---
-  [ OK ] FENCE decode : no reg/mem/branch side effects, halt=0
-  [ OK ] FENCE.TSO decode : no reg/mem/branch side effects, halt=0
-  [ OK ] PAUSE decode : no reg/mem/branch side effects, halt=0
-  [ OK ] ECALL decode : no reg/mem/branch side effects, halt=1
-  [ OK ] EBREAK decode : no reg/mem/branch side effects, halt=1
-  [ OK ] CSRRW (not ECALL/EBREAK) decode : no reg/mem/branch side effects, halt=0
+  [ OK ] FENCE decode : no side effects, halt=0
+  [ OK ] FENCE.TSO decode : no side effects, halt=0
+  [ OK ] PAUSE decode : no side effects, halt=0
+  [ OK ] ECALL decode : no side effects, halt=1
+  [ OK ] EBREAK decode : no side effects, halt=1
+  [ OK ] CSRRW (not ECALL/EBREAK) decode : no side effects, halt=0
   [ OK ] EBREAK halt : 0x00000001 (1)
   [ OK ] PC frozen on EBREAK : 0x00000000 (0)
   [ OK ] EBREAK has no register write : 0x00000000 (0)
@@ -395,3 +395,4 @@ Cycles until halt : 110
 =====================================================================================
 >>> SIMULATION PASSED: All 40 RV32I + 8 RV32M instructions checked! <<<
 =====================================================================================
+datapath_tb.v:245: $finish called at 2431000 (1ps)

@@ -1,0 +1,16 @@
+For my role in the project, I was responsible for the following instructions:
+
+- Remaining Load Instructions: lb, lh, lbu, lhu
+- Remaining Store Instructions: sb, sh
+- System & Synchronization Instructions: FENCE, FENCE.TSO, PAUSE, ECALL, EBREAK.
+
+To do this, I mainly focused on DataMem.v and control_unit.v, with corresponding instruction sequences in InstMem.v and validation in datapath_tb.v. For the remaining loads, I selected the addressed byte or halfword from a 32-bit little-endian word and applied sign extension for lb/lh and zero extension for lbu/lhu. I used addr[7:2] to select the word, addr[1:0] to select the byte, and addr[1] to select the halfword.
+
+For sb and sh, I implemented partial-word updates so that only the addressed byte or halfword changes while the other bytes remain unchanged. I validated all four byte positions and both halfword positions, then checked the resulting words through lw readback. The test word 0x7C8AF1B2 checks negative and positive signed loads as well as unsigned extension.
+
+For synchronization, I implemented FENCE, FENCE.TSO and PAUSE as safe NOPs in the project's single-cycle memory model, without register, memory or branch side effects. For ECALL and EBREAK, I decoded the SYSTEM instruction fields and asserted halt so the PC remains frozen. This is a project-specific stopping mechanism rather than a privileged trap implementation. I also checked that another SYSTEM encoding, CSRRW, does not incorrectly halt the processor.
+
+During integration, I checked testbench control connections and message widths, including the two-bit memToReg signal, and verified memory results and halt behavior. I kept the implementation consistent with the team's shared datapath and coding style. The current team testbench also validates the complete base instruction set and RV32M extension; those broader instruction groups are shared integration work and are not part of my assigned instruction ownership.
+
+November 2, 2026: documentation and verification record.
+Prepared the README files, release notes and design report. Recorded a fresh passing simulation, generated a Yosys datapath schematic and captured actual load/store and system/synchronization waveforms. This entry records the current documentation activity; earlier implementation dates and exact work-session times are not asserted here.
