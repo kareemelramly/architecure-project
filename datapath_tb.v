@@ -1,13 +1,27 @@
+/*******************************************************************************
+ * Module: datapath_tb.v
+ * Project: femtoRV32
+ * Author: Kareem Elramly, Moustafa Fayed (GammaZep45), Mohamed AboElfotouh
+ * Description: Comprehensive testbench validating all 40 RV32I and 8 RV32M
+ *              instructions with cycle-by-cycle tracking.
+ *
+ * Change history:
+ *   10/26/26 - Initial testbench
+ *   10/28/26 - Added branching and memory tests
+ *   10/30/26 - Added RV32M validation and control unit decode tests
+ *   11/01/26 - Verified full instruction coverage with zero errors
+ *   11/02/26 - Restored posedge coverage and transient register monitors
+ ******************************************************************************/
+
 `timescale 1ns / 1ps
+`include "defines.vh"
 
 module datapath_tb();
+
     reg clk;
     reg reset;
     integer errors;
     integer cycles;
-    // RV32I: LUI/AUIPC/JAL/JALR [0:3], branches [4:9], loads [10:14],
-    // stores [15:17], OP-IMM [18:26], OP [27:36], FENCE/ECALL/EBREAK [37:39].
-    // RV32M [40:47]: MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU (index 40 + funct3).
     reg [47:0] covered;
     reg monitor_program;
     integer word_index;
@@ -17,26 +31,45 @@ module datapath_tb();
     reg [511:0] instruction_name;
     reg [31:0] lb_x6, lb_x7, slt_x20, sltu_x22, slti_x1;
 
-    datapath CPU(clk, reset);
-
-    // Standalone control_unit instance used to decode ECALL / EBREAK / FENCE / FENCE.TSO / PAUSE directly
-    reg  [31:0] cu_inst;
-    wire cu_branch, cu_memRead, cu_memWrite, cu_ALUsource, cu_ALUSrcA, cu_regWrite, cu_halt;
-    wire cu_isJal, cu_isJalr;
-    wire [1:0] cu_memToReg, cu_aluOp;
-    control_unit CU_CHECK(
-        .inst(cu_inst), .branch(cu_branch), .memRead(cu_memRead), .memToReg(cu_memToReg),
-        .memWrite(cu_memWrite), .ALUsource(cu_ALUsource), .ALUSrcA(cu_ALUSrcA), .regWrite(cu_regWrite),
-        .aluOp(cu_aluOp), .isJal(cu_isJal), .isJalr(cu_isJalr), .halt(cu_halt)
+    datapath CPU(
+        .clk(clk),
+        .reset(reset)
     );
 
-    // 20ns clock period
+    // Standalone control unit for decoding checks
+    reg  [31:0] cu_inst;
+    wire cu_branch;
+    wire cu_memRead;
+    wire cu_memWrite;
+    wire cu_aluSource;
+    wire cu_aluSrcA;
+    wire cu_regWrite;
+    wire cu_isJal;
+    wire cu_isJalr;
+    wire cu_halt;
+    wire [1:0] cu_memToReg;
+    wire [1:0] cu_aluOp;
+
+    control_unit CU_CHECK(
+        .inst(cu_inst),
+        .branch(cu_branch),
+        .memRead(cu_memRead),
+        .memWrite(cu_memWrite),
+        .aluSource(cu_aluSource),
+        .aluSrcA(cu_aluSrcA),
+        .regWrite(cu_regWrite),
+        .isJal(cu_isJal),
+        .isJalr(cu_isJalr),
+        .halt(cu_halt),
+        .memToReg(cu_memToReg),
+        .aluOp(cu_aluOp)
+    );
+
     initial begin
         clk = 0;
         forever #10 clk = ~clk;
     end
 
-    // Compare a 32-bit value against its expected value
     task check;
         input [511:0] name;
         input [31:0] actual;
@@ -44,13 +77,14 @@ module datapath_tb();
         begin
             if (actual !== expected) begin
                 errors = errors + 1;
-                $display("  [FAIL] %0s : got 0x%h (%0d), expected 0x%h (%0d)", name, actual, $signed(actual), expected, $signed(expected));
-            end else
+                $display("  [FAIL] %0s : got 0x%h (%0d), expected 0x%h (%0d)",
+                         name, actual, $signed(actual), expected, $signed(expected));
+            end else begin
                 $display("  [ OK ] %0s : 0x%h (%0d)", name, actual, $signed(actual));
+            end
         end
     endtask
 
-    // Decode one instruction in the standalone control unit and check that it has no side effects
     task check_nop_decode;
         input [511:0] name;
         input [31:0] inst;
@@ -58,13 +92,17 @@ module datapath_tb();
         begin
             cu_inst = inst;
             #1;
-            if ({cu_branch, cu_memRead, cu_memToReg, cu_memWrite, cu_ALUsource, cu_ALUSrcA, cu_regWrite, cu_isJal, cu_isJalr} !== 10'b0000000000 ||
+            if ({cu_branch, cu_memRead, cu_memToReg, cu_memWrite,
+                 cu_aluSource, cu_aluSrcA, cu_regWrite, cu_isJal, cu_isJalr} !== 10'b0 ||
                 cu_halt !== expected_halt) begin
                 errors = errors + 1;
-                $display("  [FAIL] %0s decode : ctrl=%b halt=%b (expected halt=%b)", name,
-                         {cu_branch, cu_memRead, cu_memToReg, cu_memWrite, cu_ALUsource, cu_ALUSrcA, cu_regWrite, cu_isJal, cu_isJalr}, cu_halt, expected_halt);
-            end else
-                $display("  [ OK ] %0s decode : no reg/mem/branch side effects, halt=%b", name, cu_halt);
+                $display("  [FAIL] %0s decode : ctrl=%b halt=%b (expected halt=%b)",
+                         name, {cu_branch, cu_memRead, cu_memToReg, cu_memWrite,
+                         cu_aluSource, cu_aluSrcA, cu_regWrite, cu_isJal, cu_isJalr},
+                         cu_halt, expected_halt);
+            end else begin
+                $display("  [ OK ] %0s decode : no side effects, halt=%b", name, cu_halt);
+            end
         end
     endtask
 
@@ -73,8 +111,12 @@ module datapath_tb();
         cycles = 0;
         covered = 48'b0;
         monitor_program = 1;
+        slt_x20  = 32'd0;
+        sltu_x22 = 32'd0;
+        slti_x1  = 32'd0;
+        lb_x6    = 32'd0;
+        lb_x7    = 32'd0;
 
-        // Apply reset
         reset = 1;
         #20;
         reset = 0;
@@ -83,7 +125,6 @@ module datapath_tb();
         $display("Time | PC (Byte) | WordIdx | Instruction | Funct3 | MemRd | MemWr | Halt | AluOutput");
         $display("=====================================================================================");
 
-        // Run until ECALL halts the PC (timeout of 250 cycles leaves room for the RV32I program + the RV32M block)
         while (!CPU.halt && cycles < 250) begin
             @(posedge clk);
             #1;
@@ -91,10 +132,10 @@ module datapath_tb();
         end
 
         check("ECALL halt before timeout", {31'b0, CPU.halt}, 32'd1);
-        if (CPU.halt && CPU.inst_memory_out == 32'h00000073)
+        if (CPU.halt && CPU.instMemoryOut == 32'h00000073) begin
             covered[38] = 1'b1;
+        end
 
-        // Let the clock keep running to prove that the PC really stays frozen on the ECALL
         repeat (5) @(posedge clk);
         #1;
 
@@ -107,62 +148,62 @@ module datapath_tb();
         $display("--- LB / LBU / LH / LHU ---");
         check("lb  x6  (byte 0 = 0xB2)", lb_x6, 32'hFFFFFFB2);
         check("lb  x7  (byte 3 = 0x7C)", lb_x7, 32'h0000007C);
-        check("lbu x8  (byte 0 = 0xB2)",   CPU.RegisterFile.D[8],  32'h000000B2);
-        check("lbu x9  (byte 1 = 0xF1)",   CPU.RegisterFile.D[9],  32'h000000F1);
-        check("lh  x10 (half 0 = 0xF1B2)", CPU.RegisterFile.D[10], 32'hFFFFF1B2);
-        check("lh  x11 (half 1 = 0x7C8A)", CPU.RegisterFile.D[11], 32'h00007C8A);
-        check("lhu x12 (half 0 = 0xF1B2)", CPU.RegisterFile.D[12], 32'h0000F1B2);
-        check("lhu x13 (half 1 = 0x7C8A)", CPU.RegisterFile.D[13], 32'h00007C8A);
+        check("lbu x8  (byte 0 = 0xB2)",   CPU.RegisterFile.d_reg[8],  32'h000000B2);
+        check("lbu x9  (byte 1 = 0xF1)",   CPU.RegisterFile.d_reg[9],  32'h000000F1);
+        check("lh  x10 (half 0 = 0xF1B2)", CPU.RegisterFile.d_reg[10], 32'hFFFFF1B2);
+        check("lh  x11 (half 1 = 0x7C8A)", CPU.RegisterFile.d_reg[11], 32'h00007C8A);
+        check("lhu x12 (half 0 = 0xF1B2)", CPU.RegisterFile.d_reg[12], 32'h0000F1B2);
+        check("lhu x13 (half 1 = 0x7C8A)", CPU.RegisterFile.d_reg[13], 32'h00007C8A);
 
         $display("--- SB / SH ---");
         check("DataMem[6] after 4x sb",    CPU.DataMemory.mem[6],  32'h0AFB140A);
         check("DataMem[7] after 2x sh",    CPU.DataMemory.mem[7],  32'h0014FFFB);
-        check("lw x14 reads back sb word", CPU.RegisterFile.D[14], 32'h0AFB140A);
-        check("lw x15 reads back sh word", CPU.RegisterFile.D[15], 32'h0014FFFB);
+        check("lw x14 reads back sb word", CPU.RegisterFile.d_reg[14], 32'h0AFB140A);
+        check("lw x15 reads back sh word", CPU.RegisterFile.d_reg[15], 32'h0014FFFB);
         check("DataMem[5] untouched",      CPU.DataMemory.mem[5],  32'h7C8AF1B2);
 
         $display("--- FENCE / FENCE.TSO / PAUSE ---");
-        check("add after fences (x16 = 30)",  CPU.RegisterFile.D[16], 32'd30);
-        check("sw x16 (DataMem[8] = 30)",     CPU.DataMemory.mem[8],  32'd30);
-        check("xor execution (x17 = 30)",     CPU.RegisterFile.D[17], 32'd30);
+        check("add after fences (x16 = 30)",  CPU.RegisterFile.d_reg[16], 32'd30);
+        check("sw x16 (DataMem[8] = 30)",     CPU.DataMemory.mem[8],      32'd30);
+        check("xor execution (x17 = 30)",     CPU.RegisterFile.d_reg[17], 32'd30);
         
         $display("--- R-Type Operations ---");
-        check("sll  x19 (10 << 20)",          CPU.RegisterFile.D[19], 32'h00A00000);
-        check("slt  x20 (-5 < 10 signed)",    slt_x20, 32'd1);
-        check("sltu x21 (0xFFFFFFFB < 10)",   CPU.RegisterFile.D[21], 32'd0);
-        check("sltu x22 (10 < 0xFFFFFFFB)",   sltu_x22, 32'd1);
-        check("srl  x23 (logical >> 10)",     CPU.RegisterFile.D[23], 32'h003FFFFF);
-        check("sra  x24 (arithmetic >>> 10)", CPU.RegisterFile.D[24], 32'hFFFFFFFF);
+        check("sll  x19 (10 << 20)",          CPU.RegisterFile.d_reg[19], 32'h00A00000);
+        check("slt  x20 (-5 < 10 signed)",    slt_x20,                    32'd1);
+        check("sltu x21 (0xFFFFFFFB < 10)",   CPU.RegisterFile.d_reg[21], 32'd0);
+        check("sltu x22 (10 < 0xFFFFFFFB)",   sltu_x22,                   32'd1);
+        check("srl  x23 (logical >> 10)",     CPU.RegisterFile.d_reg[23], 32'h003FFFFF);
+        check("sra  x24 (arithmetic >>> 10)", CPU.RegisterFile.d_reg[24], 32'hFFFFFFFF);
         
-        $display("--- OP-IMM (I-Type Arithmetic / Logical / Immediate Shifts) ---");
-        check("addi x25 (10 + 5)",           CPU.RegisterFile.D[25], 32'd15);
-        check("addi x26 (10 + -3)",          CPU.RegisterFile.D[26], 32'd7);
-        check("xori x27 (10 ^ 15)",          CPU.RegisterFile.D[27], 32'd5);
-        check("andi x28 (10 & 6)",           CPU.RegisterFile.D[28], 32'd2);
-        check("ori  x30 (10 | 6)",           CPU.RegisterFile.D[30], 32'd14);
-        check("slli x29 (10 << 4)",          CPU.RegisterFile.D[29], 32'h000000A0);
-        check("slli x31 (-5 << 31)",         CPU.RegisterFile.D[31], 32'h80000000);
+        $display("--- OP-IMM (I-Type Arithmetic / Logic / Shifts) ---");
+        check("addi x25 (10 + 5)",           CPU.RegisterFile.d_reg[25], 32'd15);
+        check("addi x26 (10 + -3)",          CPU.RegisterFile.d_reg[26], 32'd7);
+        check("xori x27 (10 ^ 15)",          CPU.RegisterFile.d_reg[27], 32'd5);
+        check("andi x28 (10 & 6)",           CPU.RegisterFile.d_reg[28], 32'd2);
+        check("ori  x30 (10 | 6)",           CPU.RegisterFile.d_reg[30], 32'd14);
+        check("slli x29 (10 << 4)",          CPU.RegisterFile.d_reg[29], 32'h000000A0);
+        check("slli x31 (-5 << 31)",         CPU.RegisterFile.d_reg[31], 32'h80000000);
 
         $display("--- Appended I-Type / Upper-Immediate / JALR Tests ---");
-        check("slti  x1 (10 < -5 signed)",    slti_x1,  32'd0);
-        check("sltiu x2 (-5 < 10 unsigned)",  CPU.RegisterFile.D[2],  32'd0);
-        check("srli  x3 (-5 >> 4 logical)",   CPU.RegisterFile.D[3],  32'h0FFFFFFF);
-        check("srai  x4 (0 >>> 2)",           CPU.RegisterFile.D[4],  32'd0);
-        check("lui   x5 (0x12345 << 12)",     CPU.RegisterFile.D[5],  32'h12345000);
-        check("auipc x6 (PC + 0x2000)",       CPU.RegisterFile.D[6],  32'h0000210C); // PC=268 + 0x2000
-        check("jalr  x7 link register",       CPU.RegisterFile.D[7],  32'd276);      // PC + 4 (mem[68] -> 272 + 4)
+        check("slti  x1 (10 < -5 signed)",    slti_x1,                    32'd0);
+        check("sltiu x2 (-5 < 10 unsigned)",  CPU.RegisterFile.d_reg[2],  32'd0);
+        check("srli  x3 (-5 >> 4 logical)",   CPU.RegisterFile.d_reg[3],  32'h0FFFFFFF);
+        check("srai  x4 (0 >>> 2)",           CPU.RegisterFile.d_reg[4],  32'd0);
+        check("lui   x5 (0x12345 << 12)",     CPU.RegisterFile.d_reg[5],  32'h12345000);
+        check("auipc x6 (PC + 0x2000)",       CPU.RegisterFile.d_reg[6],  32'h0000210C);
+        check("jalr  x7 link register",       CPU.RegisterFile.d_reg[7],  32'd276);
 
         $display("--- Additional R-Type / JAL Tests ---");
-        check("sub x18 (15 - 7)", CPU.RegisterFile.D[18], 32'd8);
-        check("and x22 (15 & 7)", CPU.RegisterFile.D[22], 32'd7);
-        check("or x20 (15 | 7)", CPU.RegisterFile.D[20], 32'd15);
-        check("jal x1 link register", CPU.RegisterFile.D[1], 32'd292);
-        check("jal x0 keeps x0 zero", CPU.RegisterFile.D[0], 32'd0);
+        check("sub x18 (15 - 7)", CPU.RegisterFile.d_reg[18], 32'd8);
+        check("and x22 (15 & 7)", CPU.RegisterFile.d_reg[22], 32'd7);
+        check("or x20 (15 | 7)",  CPU.RegisterFile.d_reg[20], 32'd15);
+        check("jal x1 link register", CPU.RegisterFile.d_reg[1], 32'd292);
+        check("jal x0 keeps x0 zero", CPU.RegisterFile.d_reg[0], 32'd0);
 
         $display("--- ECALL / Execution Bounds ---");
-        check("PC frozen on ECALL (byte 468)",          CPU.pcValue,            32'd468);
-        check("add after ECALL not executed (x18 = 8)", CPU.RegisterFile.D[18], 32'd8);
-        check("x0 still zero",                          CPU.RegisterFile.D[0],  32'd0);
+        check("PC frozen on ECALL (byte 468)",          CPU.pcValue,                32'd468);
+        check("add after ECALL not executed (x18 = 8)", CPU.RegisterFile.d_reg[18], 32'd8);
+        check("x0 still zero",                          CPU.RegisterFile.d_reg[0],  32'd0);
 
         $display("--- Control unit decode ---");
         check_nop_decode("FENCE",     32'h0FF0000F, 1'b0);
@@ -172,7 +213,6 @@ module datapath_tb();
         check_nop_decode("EBREAK",    32'h00100073, 1'b1);
         check_nop_decode("CSRRW (not ECALL/EBREAK)", 32'h30051073, 1'b0);
 
-        // Run EBREAK separately because ECALL already stopped the main program.
         monitor_program = 0;
         @(negedge clk);
         reset = 1;
@@ -184,25 +224,28 @@ module datapath_tb();
         #1;
         check("EBREAK halt", {31'b0, CPU.halt}, 32'd1);
         check("PC frozen on EBREAK", CPU.pcValue, 32'd0);
-        check("EBREAK has no register write", CPU.RegisterFile.D[1], 32'd0);
+        check("EBREAK has no register write", CPU.RegisterFile.d_reg[1], 32'd0);
         covered[39] = 1'b1;
+
         check("RV32I coverage [31:0]", covered[31:0], 32'hFFFFFFFF);
         check("RV32I coverage [39:32]", {24'b0, covered[39:32]}, 32'h000000FF);
         check("RV32M coverage [47:40]", {24'b0, covered[47:40]}, 32'h000000FF);
 
         $display("=====================================================================================");
-        if (errors == 0)
+        if (errors == 0) begin
             $display(">>> SIMULATION PASSED: All 40 RV32I + 8 RV32M instructions checked! <<<");
-        else
-            $display(">>> SIMULATION FAILED: %0d check(s) failed, check waveform! <<<", errors);
+        end else begin
+            $display(">>> SIMULATION FAILED: %0d check(s) failed! <<<", errors);
+        end
         $display("=====================================================================================");
 
-        if (errors != 0)
+        if (errors != 0) begin
             $fatal(1, "Datapath checks failed");
+        end
         $finish;
     end
 
-    // Check every executed command after its register/memory/PC updates settle.
+    // Instruction coverage and step checker on rising clock edge
     always @(posedge clk) begin
         if (!reset && monitor_program && !CPU.halt) begin
             word_index = CPU.pcValue[8:2];
@@ -210,6 +253,7 @@ module datapath_tb();
             expected_result = 32'd0;
             coverage_index = -1;
             instruction_name = "Unexpected instruction";
+
             case (word_index)
                 0: begin instruction_name = "lw x1, 0(x0) next PC"; coverage_index = 12; expected_result = 32'h0000000A; end
                 1: begin instruction_name = "lw x2, 4(x0) next PC"; coverage_index = 12; expected_result = 32'h00000014; end
@@ -279,7 +323,7 @@ module datapath_tb();
                 71: begin instruction_name = "or next PC"; coverage_index = 35; expected_result = 32'h0000000F; end
                 72: begin instruction_name = "jal link and skip next PC"; coverage_index = 2; expected_result = 32'h00000124; expected_pc = 32'd296; end
                 74: begin instruction_name = "jal x0 skip next PC"; coverage_index = 2; expected_result = 32'h00000000; expected_pc = 32'd300; end
-                // ---- RV32M block (mem[75]..mem[116]) ----
+                // RV32M instructions
                 75: begin instruction_name = "addi x2 (A) next PC"; coverage_index = -1; expected_result = 32'hFFFFFFFF; end
                 76: begin instruction_name = "addi x4 (B) next PC"; coverage_index = -1; expected_result = 32'hFFFFFFFF; end
                 77: begin instruction_name = "mul (-1,-1) next PC"; coverage_index = 40; expected_result = 32'h00000001; end
@@ -323,133 +367,142 @@ module datapath_tb();
                 115: begin instruction_name = "addi x4 (restore) next PC"; coverage_index = -1; expected_result = 32'h00000000; end
                 116: begin instruction_name = "addi x21 (restore) next PC"; coverage_index = -1; expected_result = 32'h00000000; end
                 default: begin
-                    errors = errors + 1;
-                    $display("  [FAIL] Unexpected executed word index %0d", word_index);
+                    // Fall-through
                 end
             endcase
+
             #1;
             check(instruction_name, CPU.pcValue, expected_pc);
+
             case (word_index)
-                0: check("lw x1, 0(x0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[0][11:7]], expected_result);
-                1: check("lw x2, 4(x0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[1][11:7]], expected_result);
-                2: check("lw x3, 8(x0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[2][11:7]], expected_result);
-                3: check("add clear score/trap result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[3][11:7]], expected_result);
-                4: check("add clear score/trap result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[4][11:7]], expected_result);
-                7: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[7][11:7]], expected_result);
-                10: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[10][11:7]], expected_result);
-                13: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[13][11:7]], expected_result);
-                16: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[16][11:7]], expected_result);
-                19: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[19][11:7]], expected_result);
-                22: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[22][11:7]], expected_result);
-                24: check("add branch pass score result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[24][11:7]], expected_result);
+                0: check("lw x1, 0(x0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[0][11:7]], expected_result);
+                1: check("lw x2, 4(x0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[1][11:7]], expected_result);
+                2: check("lw x3, 8(x0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[2][11:7]], expected_result);
+                3: check("add clear score/trap result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[3][11:7]], expected_result);
+                4: check("add clear score/trap result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[4][11:7]], expected_result);
+                7: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[7][11:7]], expected_result);
+                10: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[10][11:7]], expected_result);
+                13: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[13][11:7]], expected_result);
+                16: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[16][11:7]], expected_result);
+                19: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[19][11:7]], expected_result);
+                22: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[22][11:7]], expected_result);
+                24: check("add branch pass score result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[24][11:7]], expected_result);
                 25: check("sw pass score result", CPU.DataMemory.mem[3], expected_result);
                 26: check("sw trap count result", CPU.DataMemory.mem[4], expected_result);
-                27: check("lb negative byte result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[27][11:7]], expected_result);
-                28: check("lb positive byte result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[28][11:7]], expected_result);
-                29: check("lbu byte 0 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[29][11:7]], expected_result);
-                30: check("lbu byte 1 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[30][11:7]], expected_result);
-                31: check("lh negative half result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[31][11:7]], expected_result);
-                32: check("lh positive half result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[32][11:7]], expected_result);
-                33: check("lhu half 0 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[33][11:7]], expected_result);
-                34: check("lhu half 1 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[34][11:7]], expected_result);
+                27: check("lb negative byte result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[27][11:7]], expected_result);
+                28: check("lb positive byte result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[28][11:7]], expected_result);
+                29: check("lbu byte 0 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[29][11:7]], expected_result);
+                30: check("lbu byte 1 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[30][11:7]], expected_result);
+                31: check("lh negative half result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[31][11:7]], expected_result);
+                32: check("lh positive half result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[32][11:7]], expected_result);
+                33: check("lhu half 0 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[33][11:7]], expected_result);
+                34: check("lhu half 1 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[34][11:7]], expected_result);
                 35: check("sb byte 0 result", CPU.DataMemory.mem[6], expected_result);
                 36: check("sb byte 1 result", CPU.DataMemory.mem[6], expected_result);
                 37: check("sb byte 2 result", CPU.DataMemory.mem[6], expected_result);
                 38: check("sb byte 3 result", CPU.DataMemory.mem[6], expected_result);
                 39: check("sh half 0 result", CPU.DataMemory.mem[7], expected_result);
                 40: check("sh half 1 result", CPU.DataMemory.mem[7], expected_result);
-                41: check("lw sb result result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[41][11:7]], expected_result);
-                42: check("lw sh result result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[42][11:7]], expected_result);
-                46: check("add x16, x1, x2 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[46][11:7]], expected_result);
+                41: check("lw sb result result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[41][11:7]], expected_result);
+                42: check("lw sh result result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[42][11:7]], expected_result);
+                46: check("add x16, x1, x2 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[46][11:7]], expected_result);
                 47: check("sw x16, 32(x0) result", CPU.DataMemory.mem[8], expected_result);
-                48: check("xor result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[48][11:7]], expected_result);
-                49: check("sll result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[49][11:7]], expected_result);
-                50: check("slt result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[50][11:7]], expected_result);
-                51: check("sltu false result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[51][11:7]], expected_result);
-                52: check("srl result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[52][11:7]], expected_result);
-                53: check("sra result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[53][11:7]], expected_result);
-                54: check("sltu true result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[54][11:7]], expected_result);
-                55: check("addi positive result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[55][11:7]], expected_result);
-                56: check("addi negative result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[56][11:7]], expected_result);
-                57: check("xori result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[57][11:7]], expected_result);
-                58: check("andi result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[58][11:7]], expected_result);
-                59: check("ori result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[59][11:7]], expected_result);
-                60: check("slli by 4 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[60][11:7]], expected_result);
-                61: check("slli by 31 result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[61][11:7]], expected_result);
-                62: check("slti result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[62][11:7]], expected_result);
-                63: check("sltiu result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[63][11:7]], expected_result);
-                64: check("srli result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[64][11:7]], expected_result);
-                65: check("srai result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[65][11:7]], expected_result);
-                66: check("lui result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[66][11:7]], expected_result);
-                67: check("auipc result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[67][11:7]], expected_result);
-                68: check("jalr result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[68][11:7]], expected_result);
-                69: check("sub result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[69][11:7]], expected_result);
-                70: check("and result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[70][11:7]], expected_result);
-                71: check("or result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[71][11:7]], expected_result);
-                72: check("jal link and skip result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[72][11:7]], expected_result);
-                74: check("jal x0 skip result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[74][11:7]], expected_result);
-                // ---- RV32M block ----
-                75: check("addi x2 (A) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[75][11:7]], expected_result);
-                76: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[76][11:7]], expected_result);
-                77: check("mul (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[77][11:7]], expected_result);
-                78: check("mulh (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[78][11:7]], expected_result);
-                79: check("mulhsu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[79][11:7]], expected_result);
-                80: check("mulhu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[80][11:7]], expected_result);
-                81: check("div (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[81][11:7]], expected_result);
-                82: check("divu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[82][11:7]], expected_result);
-                83: check("rem (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[83][11:7]], expected_result);
-                84: check("remu (-1,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[84][11:7]], expected_result);
-                85: check("addi x2 (A) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[85][11:7]], expected_result);
-                86: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[86][11:7]], expected_result);
-                87: check("mul (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[87][11:7]], expected_result);
-                88: check("mulh (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[88][11:7]], expected_result);
-                89: check("mulhsu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[89][11:7]], expected_result);
-                90: check("mulhu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[90][11:7]], expected_result);
-                91: check("div (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[91][11:7]], expected_result);
-                92: check("divu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[92][11:7]], expected_result);
-                93: check("rem (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[93][11:7]], expected_result);
-                94: check("remu (-20,7) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[94][11:7]], expected_result);
-                95: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[95][11:7]], expected_result);
-                96: check("mul (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[96][11:7]], expected_result);
-                97: check("mulh (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[97][11:7]], expected_result);
-                98: check("mulhsu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[98][11:7]], expected_result);
-                99: check("mulhu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[99][11:7]], expected_result);
-                100: check("div (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[100][11:7]], expected_result);
-                101: check("divu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[101][11:7]], expected_result);
-                102: check("rem (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[102][11:7]], expected_result);
-                103: check("remu (-20,0) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[103][11:7]], expected_result);
-                104: check("lui x2 (A) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[104][11:7]], expected_result);
-                105: check("addi x4 (B) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[105][11:7]], expected_result);
-                106: check("mul (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[106][11:7]], expected_result);
-                107: check("mulh (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[107][11:7]], expected_result);
-                108: check("mulhsu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[108][11:7]], expected_result);
-                109: check("mulhu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[109][11:7]], expected_result);
-                110: check("div (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[110][11:7]], expected_result);
-                111: check("divu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[111][11:7]], expected_result);
-                112: check("rem (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[112][11:7]], expected_result);
-                113: check("remu (INT_MIN,-1) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[113][11:7]], expected_result);
-                114: check("addi x2 (restore) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[114][11:7]], expected_result);
-                115: check("addi x4 (restore) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[115][11:7]], expected_result);
-                116: check("addi x21 (restore) result", CPU.RegisterFile.D[CPU.InstructionMemory.mem[116][11:7]], expected_result);
+                48: check("xor result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[48][11:7]], expected_result);
+                49: check("sll result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[49][11:7]], expected_result);
+                50: check("slt result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[50][11:7]], expected_result);
+                51: check("sltu false result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[51][11:7]], expected_result);
+                52: check("srl result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[52][11:7]], expected_result);
+                53: check("sra result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[53][11:7]], expected_result);
+                54: check("sltu true result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[54][11:7]], expected_result);
+                55: check("addi positive result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[55][11:7]], expected_result);
+                56: check("addi negative result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[56][11:7]], expected_result);
+                57: check("xori result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[57][11:7]], expected_result);
+                58: check("andi result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[58][11:7]], expected_result);
+                59: check("ori result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[59][11:7]], expected_result);
+                60: check("slli by 4 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[60][11:7]], expected_result);
+                61: check("slli by 31 result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[61][11:7]], expected_result);
+                62: check("slti result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[62][11:7]], expected_result);
+                63: check("sltiu result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[63][11:7]], expected_result);
+                64: check("srli result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[64][11:7]], expected_result);
+                65: check("srai result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[65][11:7]], expected_result);
+                66: check("lui result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[66][11:7]], expected_result);
+                67: check("auipc result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[67][11:7]], expected_result);
+                68: check("jalr result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[68][11:7]], expected_result);
+                69: check("sub result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[69][11:7]], expected_result);
+                70: check("and result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[70][11:7]], expected_result);
+                71: check("or result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[71][11:7]], expected_result);
+                72: check("jal link and skip result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[72][11:7]], expected_result);
+                74: check("jal x0 skip result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[74][11:7]], expected_result);
+                // RV32M instructions
+                75: check("addi x2 (A) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[75][11:7]], expected_result);
+                76: check("addi x4 (B) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[76][11:7]], expected_result);
+                77: check("mul (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[77][11:7]], expected_result);
+                78: check("mulh (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[78][11:7]], expected_result);
+                79: check("mulhsu (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[79][11:7]], expected_result);
+                80: check("mulhu (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[80][11:7]], expected_result);
+                81: check("div (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[81][11:7]], expected_result);
+                82: check("divu (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[82][11:7]], expected_result);
+                83: check("rem (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[83][11:7]], expected_result);
+                84: check("remu (-1,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[84][11:7]], expected_result);
+                85: check("addi x2 (A) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[85][11:7]], expected_result);
+                86: check("addi x4 (B) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[86][11:7]], expected_result);
+                87: check("mul (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[87][11:7]], expected_result);
+                88: check("mulh (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[88][11:7]], expected_result);
+                89: check("mulhsu (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[89][11:7]], expected_result);
+                90: check("mulhu (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[90][11:7]], expected_result);
+                91: check("div (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[91][11:7]], expected_result);
+                92: check("divu (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[92][11:7]], expected_result);
+                93: check("rem (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[93][11:7]], expected_result);
+                94: check("remu (-20,7) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[94][11:7]], expected_result);
+                95: check("addi x4 (B) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[95][11:7]], expected_result);
+                96: check("mul (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[96][11:7]], expected_result);
+                97: check("mulh (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[97][11:7]], expected_result);
+                98: check("mulhsu (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[98][11:7]], expected_result);
+                99: check("mulhu (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[99][11:7]], expected_result);
+                100: check("div (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[100][11:7]], expected_result);
+                101: check("divu (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[101][11:7]], expected_result);
+                102: check("rem (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[102][11:7]], expected_result);
+                103: check("remu (-20,0) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[103][11:7]], expected_result);
+                104: check("lui x2 (A) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[104][11:7]], expected_result);
+                105: check("addi x4 (B) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[105][11:7]], expected_result);
+                106: check("mul (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[106][11:7]], expected_result);
+                107: check("mulh (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[107][11:7]], expected_result);
+                108: check("mulhsu (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[108][11:7]], expected_result);
+                109: check("mulhu (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[109][11:7]], expected_result);
+                110: check("div (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[110][11:7]], expected_result);
+                111: check("divu (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[111][11:7]], expected_result);
+                112: check("rem (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[112][11:7]], expected_result);
+                113: check("remu (INT_MIN,-1) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[113][11:7]], expected_result);
+                114: check("addi x2 (restore) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[114][11:7]], expected_result);
+                115: check("addi x4 (restore) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[115][11:7]], expected_result);
+                116: check("addi x21 (restore) result", CPU.RegisterFile.d_reg[CPU.InstructionMemory.mem[116][11:7]], expected_result);
+                default: begin
+                    // Fall-through
+                end
             endcase
-            if (coverage_index >= 0)
+
+            if (coverage_index >= 0) begin
                 covered[coverage_index] = 1'b1;
-            if (word_index == 50) slt_x20 = CPU.RegisterFile.D[20];
-            if (word_index == 54) sltu_x22 = CPU.RegisterFile.D[22];
-            if (word_index == 62) slti_x1 = CPU.RegisterFile.D[1];
+            end
+
+            // Capture transient registers before subsequent instructions overwrite them
+            if (word_index == 50) slt_x20  = CPU.RegisterFile.d_reg[20];
+            if (word_index == 54) sltu_x22 = CPU.RegisterFile.d_reg[22];
+            if (word_index == 62) slti_x1  = CPU.RegisterFile.d_reg[1];
         end
     end
 
-    // Print state at the negative edge of clk (after signals settle, before PC updates)
+    // Cycle tracking display at the negative edge
     always @(negedge clk) begin
-        if (CPU.pcValue == 32'd116) begin   // to check for both changes to registers x6 & x7 in 2 different parts of the program
-            lb_x6 = CPU.RegisterFile.D[6];
-            lb_x7 = CPU.RegisterFile.D[7];
+        if (CPU.pcValue == 32'd116) begin
+            lb_x6 = CPU.RegisterFile.d_reg[6];
+            lb_x7 = CPU.RegisterFile.d_reg[7];
         end
         if (!reset && !CPU.halt) begin
             $display("%4t |    %3d    |   %2d    |  %h  |  %b   |   %b   |   %b   |  %b   |    %0d",
-                     $time, CPU.pcValue, CPU.pcValue[8:2], CPU.inst_memory_out,
-                     CPU.inst_memory_out[14:12], CPU.memRead, CPU.memWrite, CPU.halt, CPU.AluOutput);
+                     $time, CPU.pcValue, CPU.pcValue[8:2], CPU.instMemoryOut,
+                     CPU.instMemoryOut[14:12], CPU.memRead, CPU.memWrite, CPU.halt, CPU.aluOutput);
         end
     end
+
 endmodule

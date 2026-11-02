@@ -1,77 +1,89 @@
+/*******************************************************************************
+ * Module: alu_unit.v
+ * Project: femtoRV32
+ * Author: Kareem Elramly, Moustafa Fayed (GammaZep45), Mohamed AboElfotouh
+ * Description: ALU Control Decoder for R-type, I-type, M-extension, and branches.
+ *
+ * Change history:
+ *   10/26/26 - Initial ALU decoder
+ *   10/28/26 - Added shift, comparison, and I-type decoding
+ *   10/30/26 - Merged RV32M opcode checking
+ *   11/01/26 - Cleaned up redundant decoder cases
+ ******************************************************************************/
+
 `timescale 1ns / 1ps
+`include "defines.vh"
 
 module alu_unit(
-    input [31:0] inst,
-    input [1:0] aluOp,
-    output reg [4:0] AluSelection
+    input  [1:0]  aluOp,
+    input  [31:0] inst,
+    output reg [4:0] aluSelection
 );
 
-always @(*) begin
-    if (aluOp == 2'b00)
-         AluSelection = 5'b00010; // Load/Store -> ADD
-         
-    // M Extension 
-    else if (aluOp == 2'b10 && inst[31:25] == 7'b0000001) begin
-        case (inst[14:12])
-            3'b000: AluSelection = 5'b10101; // MUL
-            3'b001: AluSelection = 5'b11011; // MULH
-            3'b010: AluSelection = 5'b11100; // MULHSU
-            3'b011: AluSelection = 5'b11101; // MULHU
-            3'b100: AluSelection = 5'b11110; // DIV
-            3'b101: AluSelection = 5'b11111; // DIVU
-            3'b110: AluSelection = 5'b10110; // REM
-            3'b111: AluSelection = 5'b10111; // REMU
-            default: AluSelection = 5'b00000; // Fallback to safe 0 instead of X
+    wire [2:0] funct3;
+    wire [6:0] funct7;
+
+    assign funct3 = inst[14:12];
+    assign funct7 = inst[31:25];
+
+    always @* begin
+        aluSelection = `ALU_ADD;
+
+        case (aluOp)
+            `ALUOP_ADD: begin
+                aluSelection = `ALU_ADD;
+            end
+
+            `ALUOP_BRANCH: begin
+                aluSelection = `ALU_SUB;
+            end
+
+            `ALUOP_RTYPE: begin
+                if (funct7 == 7'b0000001) begin
+                    case (funct3)
+                        3'b000:  aluSelection = `ALU_MUL;
+                        3'b001:  aluSelection = `ALU_MULH;
+                        3'b010:  aluSelection = `ALU_MULHSU;
+                        3'b011:  aluSelection = `ALU_MULHU;
+                        3'b100:  aluSelection = `ALU_DIV;
+                        3'b101:  aluSelection = `ALU_DIVU;
+                        3'b110:  aluSelection = `ALU_REM;
+                        3'b111:  aluSelection = `ALU_REMU;
+                        default: aluSelection = `ALU_ADD;
+                    endcase
+                end else begin
+                    case (funct3)
+                        3'b000:  aluSelection = (inst[30]) ? `ALU_SUB : `ALU_ADD;
+                        3'b001:  aluSelection = `ALU_SLL;
+                        3'b010:  aluSelection = `ALU_SLT;
+                        3'b011:  aluSelection = `ALU_SLTU;
+                        3'b100:  aluSelection = `ALU_XOR;
+                        3'b101:  aluSelection = (inst[30]) ? `ALU_SRA : `ALU_SRL;
+                        3'b110:  aluSelection = `ALU_OR;
+                        3'b111:  aluSelection = `ALU_AND;
+                        default: aluSelection = `ALU_ADD;
+                    endcase
+                end
+            end
+
+            `ALUOP_ITYPE: begin
+                case (funct3)
+                    3'b000:  aluSelection = `ALU_ADD;
+                    3'b001:  aluSelection = `ALU_SLL;
+                    3'b010:  aluSelection = `ALU_SLT;
+                    3'b011:  aluSelection = `ALU_SLTU;
+                    3'b100:  aluSelection = `ALU_XOR;
+                    3'b101:  aluSelection = (inst[30]) ? `ALU_SRA : `ALU_SRL;
+                    3'b110:  aluSelection = `ALU_OR;
+                    3'b111:  aluSelection = `ALU_AND;
+                    default: aluSelection = `ALU_ADD;
+                endcase
+            end
+
+            default: begin
+                aluSelection = `ALU_ADD;
+            end
         endcase
     end
-    
-    // Branch instructions
-    else if(aluOp == 2'b01)
-         AluSelection = 5'b00110; // Branch -> SUB
-         
-    // R-Type logic (aluOp == 2'b10)
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b000 && inst[30] == 1'b0)
-         AluSelection = 5'b00010; // ADD
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b000 && inst[30] == 1'b1)
-         AluSelection = 5'b00110; // SUB
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b111 && inst[30] == 1'b0)
-         AluSelection = 5'b00000; // AND
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b110 && inst[30] == 1'b0)
-         AluSelection = 5'b00001; // OR
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b100 && inst[30] == 1'b0)
-         AluSelection = 5'b00100; // XOR
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b001 && inst[30] == 1'b0)
-         AluSelection = 5'b01000; // SLL
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b101 && inst[30] == 1'b0)
-         AluSelection = 5'b01001; // SRL
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b101 && inst[30] == 1'b1)
-         AluSelection = 5'b01010; // SRA
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b010 && inst[30] == 1'b0)
-         AluSelection = 5'b00111; // SLT
-    else if(aluOp == 2'b10 && inst[14:12] == 3'b011 && inst[30] == 1'b0)
-         AluSelection = 5'b00011; // SLTU
-         
-    // I-Type 
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b000)
-         AluSelection = 5'b00010; // ADDI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b100)
-         AluSelection = 5'b00100; // XORI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b110)
-         AluSelection = 5'b00001; // ORI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b111)
-         AluSelection = 5'b00000; // ANDI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b001)
-         AluSelection = 5'b01000; // SLLI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b101 && inst[31:25] == 7'b0000000)
-         AluSelection = 5'b01001; // SRLI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b101 && inst[30] == 1'b1)
-         AluSelection = 5'b01010; // SRAI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b010)
-         AluSelection = 5'b00111; // SLTI
-    else if(aluOp == 2'b11 && inst[14:12] == 3'b011)
-         AluSelection = 5'b00011; // SLTIU
-         
-    else
-         AluSelection = 5'b00000; // Fallback to safe 0 instead of X
-end
+
 endmodule

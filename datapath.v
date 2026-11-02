@@ -1,103 +1,146 @@
+/*******************************************************************************
+ * Module: datapath.v
+ * Project: femtoRV32
+ * Author: Kareem Elramly, Moustafa Fayed (GammaZep45), Mohamed AboElfotouh
+ * Description: Top-level single-cycle RISC-V processor datapath.
+ *
+ * Change history:
+ *   10/26/26 - Initial single-cycle datapath (7 instructions)
+ *   10/27/26 - Added BranchUnit and halt integration
+ *   10/29/26 - Expanded multiplexers for LUI, AUIPC, JAL, JALR
+ *   10/30/26 - Unified merge of all 42 base instructions and RV32M
+ ******************************************************************************/
+
 `timescale 1ns / 1ps
+`include "defines.vh"
 
-module datapath(input clk, input reset);
+module datapath(
+    input clk,
+    input reset
+);
+
     wire [31:0] pcValue;
-    wire [31:0] readData1, readData2;
-    wire [31:0] data_memory_out;
-    wire [31:0] inst_memory_out;
-    wire [31:0] AluOutput;
-    wire [31:0] immGenOut;
-    wire [4:0] AluSel;
-    wire AluZero;
-
-    // Control wires
-    wire branch, memRead, memWrite, ALUsource, ALUSrcA, regWrite, halt;
-    wire [1:0] memToReg;
-    wire [1:0] AluOp;
-    wire isJal, isJalr;
-    wire takeBranch;
-
-    // Datapath routing wires
-    reg [31:0] regWriteData;
-    wire [31:0] aluInputData1;
-    wire [31:0] aluInputData2;
+    wire [31:0] pcInput;
     wire [31:0] pcPlus4;
     wire [31:0] jumpTarget;
     wire [31:0] jalrTarget;
-    reg [31:0] pcInput;
+    wire [31:0] instMemoryOut;
+    wire [31:0] readData1;
+    wire [31:0] readData2;
+    wire [31:0] immGenOut;
+    wire [31:0] aluInputData1;
+    wire [31:0] aluInputData2;
+    wire [31:0] aluOutput;
+    wire [31:0] dataMemoryOut;
+    wire [31:0] regWriteData;
+    wire [4:0]  aluSel;
+    wire [1:0]  memToReg;
+    wire [1:0]  aluOp;
+    wire branch;
+    wire memRead;
+    wire memWrite;
+    wire aluSource;
+    wire aluSrcA;
+    wire regWrite;
+    wire isJal;
+    wire isJalr;
+    wire halt;
+    wire takeBranch;
+    wire aluZero;
+    wire pcLoad;
 
-    // Submodules
-    DataMem DataMemory(
-        .clk(clk), .MemRead(memRead), .MemWrite(memWrite),
-        .funct3(inst_memory_out[14:12]),
-        .addr(AluOutput[7:0]),
-        .data_in(readData2),
-        .data_out(data_memory_out)
+    assign pcLoad = ~halt;
+
+    N_bit_register #(32) pcRegister(
+        .Load(pcLoad),
+        .clk(clk),
+        .rst(reset),
+        .D(pcInput),
+        .Q(pcValue)
     );
+
+    assign pcPlus4 = pcValue + 32'd4;
 
     InstMem InstructionMemory(
-        pcValue[8:2], inst_memory_out
-    );
-
-    RegFile #(32) RegisterFile(
-        clk, reset, 
-        inst_memory_out[19:15], inst_memory_out[24:20], inst_memory_out[11:7], 
-        regWriteData, regWrite, 
-        readData1, readData2
-    );
-
-    ImmGen immGenerator(
-        inst_memory_out, immGenOut
+        .addr(pcValue[8:2]),
+        .data_out(instMemoryOut)
     );
 
     control_unit controlUnit(
-        inst_memory_out, branch, memRead, memToReg, memWrite, 
-        ALUsource, ALUSrcA, regWrite, AluOp, isJal, isJalr, halt
+        .inst(instMemoryOut),
+        .branch(branch),
+        .memRead(memRead),
+        .memWrite(memWrite),
+        .aluSource(aluSource),
+        .aluSrcA(aluSrcA),
+        .regWrite(regWrite),
+        .isJal(isJal),
+        .isJalr(isJalr),
+        .halt(halt),
+        .memToReg(memToReg),
+        .aluOp(aluOp)
+    );
+
+    RegFile #(32) RegisterFile(
+        .clk(clk),
+        .rst(reset),
+        .readreg1(instMemoryOut[19:15]),
+        .readreg2(instMemoryOut[24:20]),
+        .writereg(instMemoryOut[11:7]),
+        .writedata(regWriteData),
+        .regwrite(regWrite),
+        .readdata1(readData1),
+        .readdata2(readData2)
+    );
+
+    ImmGen immGenerator(
+        .inst(instMemoryOut),
+        .genOut(immGenOut)
     );
 
     alu_unit AluControl(
-        inst_memory_out, AluOp, AluSel
+        .aluOp(aluOp),
+        .inst(instMemoryOut),
+        .aluSelection(aluSel)
     );
 
-    // ALU input multiplexers
-    assign aluInputData1 = (ALUSrcA) ? pcValue : readData1;
-    assign aluInputData2 = (ALUsource) ? immGenOut : readData2;
+    assign aluInputData1 = (aluSrcA)    ? pcValue   : readData1;
+    assign aluInputData2 = (aluSource) ? immGenOut : readData2;
 
     ALU #(32) aluModule(
-        aluInputData1, aluInputData2, AluSel, AluOutput, AluZero
+        .aluSel(aluSel),
+        .in1(aluInputData1),
+        .in2(aluInputData2),
+        .result(aluOutput),
+        .zero(aluZero)
     );
 
     BranchUnit branchComparator(
-        branch, inst_memory_out[14:12], readData1, readData2, takeBranch
+        .branch(branch),
+        .funct3(instMemoryOut[14:12]),
+        .readData1(readData1),
+        .readData2(readData2),
+        .takeBranch(takeBranch)
     );
 
-    // Register Writeback 4-to-1 Multiplexer
-    always @(*) begin
-        case (memToReg)
-            2'b00: regWriteData = AluOutput;        // ALU
-            2'b01: regWriteData = data_memory_out;  // Memory Load
-            2'b10: regWriteData = pcPlus4;          // JAL / JALR Link
-            2'b11: regWriteData = immGenOut;        // LUI
-        endcase
-    end
-
-    // PC calculations
-    assign pcPlus4    = pcValue + 32'd4;
-    assign jumpTarget = pcValue + immGenOut;                    // JAL & Branches
-    assign jalrTarget = (readData1 + immGenOut) & ~32'd1;       // JALR (LSB forced to 0)
-
-    // Next PC 3-to-1 Multiplexer
-    always @(*) begin
-        if (isJalr)
-            pcInput = jalrTarget;
-        else if (isJal || takeBranch)
-            pcInput = jumpTarget;
-        else
-            pcInput = pcPlus4;
-    end
-
-    N_bit_register pcRegister(
-        ~halt, clk, reset, pcInput, pcValue
+    DataMem DataMemory(
+        .clk(clk),
+        .memRead(memRead),
+        .memWrite(memWrite),
+        .funct3(instMemoryOut[14:12]),
+        .addr(aluOutput[7:0]),
+        .dataIn(readData2),
+        .dataOut(dataMemoryOut)
     );
+
+    assign jumpTarget = pcValue + immGenOut;
+    assign jalrTarget = (readData1 + immGenOut) & ~32'd1;
+
+    assign pcInput = (isJalr)              ? jalrTarget :
+                     (isJal || takeBranch) ? jumpTarget : pcPlus4;
+
+    assign regWriteData = (memToReg == `WB_ALU) ? aluOutput     :
+                          (memToReg == `WB_MEM) ? dataMemoryOut :
+                          (memToReg == `WB_PC4) ? pcPlus4       : immGenOut;
 
 endmodule

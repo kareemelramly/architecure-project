@@ -1,35 +1,53 @@
+/*******************************************************************************
+ * Module: ImmGen.v
+ * Project: femtoRV32
+ * Author: Kareem Elramly, Moustafa Fayed (GammaZep45), Mohamed AboElfotouh
+ * Description: Immediate Generator decoding I, S, B, U, and J formats.
+ *
+ * Change history:
+ *   10/26/26 - Initial multiplexer-based I, S, B extraction
+ *   10/29/26 - Upgraded to full 32-bit sign extension for I, S, B, U, J types
+ ******************************************************************************/
+
 `timescale 1ns / 1ps
+`include "defines.vh"
 
-module ImmGen (
-    input [31:0] inst,
-    output reg [31:0] gen_out
+module ImmGen(
+    input  [31:0] inst,
+    output reg [31:0] genOut
 );
-    wire [6:2] opcode = inst[6:2];
 
-    always @(*) begin
+    wire [4:0] opcode;
+    assign opcode = inst[6:2];
+
+    always @* begin
         case (opcode)
-            // I-type: Loads, I-ALU, JALR
-            5'b00000, 5'b00100, 5'b11001: 
-                gen_out = {{20{inst[31]}}, inst[31:20]};
+            `OPC_LOAD, `OPC_OP_IMM, `OPC_JALR: begin
+                genOut = {{20{inst[31]}}, inst[31:20]};
+            end
 
-            // S-type: Stores
-            5'b01000: 
-                gen_out = {{20{inst[31]}}, inst[31:25], inst[11:7]};
+            `OPC_STORE: begin
+                genOut = {{20{inst[31]}}, inst[31:25], inst[11:7]};
+            end
 
-            // B-type: Branches (already byte-aligned with LSB = 0)
-            5'b11000: 
-                gen_out = {{19{inst[31]}}, inst[31], inst[7], inst[30:25], inst[11:8], 1'b0};
+            `OPC_BRANCH: begin
+                genOut = {{19{inst[31]}}, inst[31], inst[7],
+                          inst[30:25], inst[11:8], 1'b0};
+            end
 
-            // U-type: LUI, AUIPC (Upper 20 bits shifted by 12)
-            5'b01101, 5'b00101: 
-                gen_out = {inst[31:12], 12'b0};
+            `OPC_LUI, `OPC_AUIPC: begin
+                genOut = {inst[31:12], 12'b0};
+            end
 
-            // J-type: JAL (already byte-aligned with LSB = 0)
-            5'b11011: 
-                gen_out = {{11{inst[31]}}, inst[31], inst[19:12], inst[20], inst[30:21], 1'b0};
+            `OPC_JAL: begin
+                genOut = {{11{inst[31]}}, inst[31], inst[19:12],
+                          inst[20], inst[30:21], 1'b0};
+            end
 
-            default: 
-                gen_out = 32'd0;
+            default: begin
+                genOut = 32'd0;
+            end
         endcase
     end
+
 endmodule
