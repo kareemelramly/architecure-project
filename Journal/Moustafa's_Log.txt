@@ -1,8 +1,14 @@
-For my role in the project, I was responsible over the following instructions:
-
-•	Remaining Base R-Type: sll, slt, sltu, xor, srl, sra
-•	Remaining Base I-Type Arithmetic/Logic: addi, slti, sltiu, xori, ori, andi, slli, srli, srai
-•	RV32M Extension: mul, mulh, mulhsu, mulhu, div, divu, rem, remu
-
-
-To do this, I mainly focused on implementing the encoding methods (searching through opcode, funct3 and bit 30 for instructions such as sra and srai) through the ALU unit and ALU, as well as implementing the appropriate signal for the control unit for immediate operands going into the ALU MUX. One particular design choice I made was to assign ALUOp = 11 for immediate instructions, which is unconventional for typical RV32 implementations, but this was in order to avoid gate overhead and to reduce the processing needed to identify whether the ALU instruction to be executed is to be of I-type. I was also responsible for extending the number of selection bits for the sake of having enough bits to encode M extension from 0:3 to 0:4. 
+October 28, 1:00 PM: XOR Operation.
+Implemented the base R-type XOR instruction encoding through the ALU unit.  
+October 29, 2:30 PM: Implemented Shift R Type.
+Added the remaining base R-type shift instructions (sll, srl, sra) by searching through the opcode, funct3, and bit 30.
+October 29, 4:15 PM: Implemented 50% of immediate.
+Began working on the base I-Type arithmetic and logic instructions.
+October 31, 11:30 AM: Immediate Instructions, Troubleshooting.
+Completed the I-Type instructions by assigning ALUOp = 11 to avoid gate overhead and implemented the appropriate signal for the control unit for immediate operands going into the ALU MUX.
+October 31, 3:45 PM: Implemented M extension, Tb Results.
+Added the RV32M Extension (mul, mulh, mulhsu, mulhu, div, divu, rem, remu) and extended the selection bits from 0:3 to 0:4 to have enough bits for the encoding. 
+October 31, 5:00 PM: Tb Result.
+Tested the implemented instructions. 
+November 2, 4:40 PM: Added Journal Log.
+Finalized the log detailing the design choices and project contributions.
