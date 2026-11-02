@@ -1,0 +1,8 @@
+For my role in the project, I was responsible over the following instructions:
+
+•	Remaining Base R-Type: sll, slt, sltu, xor, srl, sra
+•	Remaining Base I-Type Arithmetic/Logic: addi, slti, sltiu, xori, ori, andi, slli, srli, srai
+•	RV32M Extension: mul, mulh, mulhsu, mulhu, div, divu, rem, remu
+
+
+To do this, I mainly focused on implementing the encoding methods (searching through opcode, funct3 and bit 30 for instructions such as sra and srai) through the ALU unit and ALU, as well as implementing the appropriate signal for the control unit for immediate operands going into the ALU MUX. One particular design choice I made was to assign ALUOp = 11 for immediate instructions, which is unconventional for typical RV32 implementations, but this was in order to avoid gate overhead and to reduce the processing needed to identify whether the ALU instruction to be executed is to be of I-type. I was also responsible for extending the number of selection bits for the sake of having enough bits to encode M extension from 0:3 to 0:4. 
