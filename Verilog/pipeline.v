@@ -1,18 +1,22 @@
 /*******************************************************************************
  * Module: pipeline.v
  * Project: femtoRV32
- * Author: Kareem Elramly
+ * Author: Kareem Elramly, Mohamed AboElfotouh
  * Description: 5-stage pipelined RV32I + RV32M processor (IF, ID, EX, MEM, WB)
  *              with a single unified memory port shared by IF and MEM.
  *              A C0/C1 phase controller gives one instruction slot every two
  *              clock cycles (effective CPI = 2):
  *                C0: memory serves IF, RegFile writes the WB value
  *                C1: memory serves MEM, PC + pipeline registers advance
- *              Hazards: EX forwarding, load-use stall, branch resolved in EX
- *              with a BTB + 2-bit BHT predictor (BP_ENABLE = 0 turns it off).
+ *              Hazards: EX forwarding, load-use stall, and (Bonus 4) branches
+ *              and jumps resolved in ID with ID-stage forwarding and stalls
+ *              (HazardUnit). BTB + 2-bit BHT predictor in IF
+ *              (BP_ENABLE = 0 turns it off).
  *
  * Change history:
  *   11/13/26 - Created pipelined top level from datapath.v
+ *   11/13/26 - Bonus 4: branch/jump resolution moved from EX to ID, ID-stage
+ *              forwarding, HazardUnit, mispredict flush of IF/ID only
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -69,6 +73,18 @@ module pipeline #(
     wire [31:0] readData2;
     wire [31:0] immGenOut;
     wire        stall;
+    wire        loadUseStall;
+    wire        branchStall;
+    wire [1:0]  idForwardA;
+    wire [1:0]  idForwardB;
+    wire [31:0] idRs1Val;
+    wire [31:0] idRs2Val;
+    wire        idTakeBranch;
+    wire        idActualTaken;
+    wire [31:0] idActualTarget;
+    wire [31:0] idActualNextPC;
+    wire        idIsCtrlFlow;
+    wire        exMemFwdEn;
     wire        haltNow;
     wire        haltSet;
     wire        haltLatch;
@@ -106,11 +122,6 @@ module pipeline #(
     wire [31:0] aluOutput;
     wire        aluZero;
     wire [31:0] exResult;
-    wire        exTakeBranch;
-    wire        actualTaken;
-    wire [31:0] actualTarget;
-    wire [31:0] actualNextPC;
-    wire        isCtrlFlow;
     wire        redirect;
     wire        bpUpdateEn;
 
@@ -156,14 +167,14 @@ module pipeline #(
         .predictTaken(predictTaken),
         .predictTarget(predictTarget),
         .updateEn(bpUpdateEn),
-        .updatePC(ID_EX_PC),
-        .actualTaken(actualTaken),
-        .actualTarget(actualTarget)
+        .updatePC(IF_ID_PC),
+        .actualTaken(idActualTaken),
+        .actualTarget(idActualTarget)
     );
 
     assign predictTakenEff = (BP_ENABLE != 0) ? predictTaken : 1'b0;
     assign predNextPC      = (predictTakenEff) ? predictTarget : pcPlus4;
-    assign pcInput         = (redirect)        ? actualNextPC  : predNextPC;
+    assign pcInput         = (redirect)        ? idActualNextPC : predNextPC;
 
     assign pcLoad = advance & (redirect | (~stall & ~haltNow));
 
@@ -268,14 +279,60 @@ module pipeline #(
     );
 
     // Load-use hazard: one bubble between a load and its consumer
-    assign stall = ID_EX_MemRead && (ID_EX_Rd != 5'd0) &&
-                   ((ID_EX_Rd == IF_ID_Inst[19:15]) ||
-                    (ID_EX_Rd == IF_ID_Inst[24:20]));
+    HazardUnit hazardUnit(
+        .idInst(IF_ID_Inst),
+        .idValid(idValid),
+        .idExMemRead(ID_EX_MemRead),
+        .idExRegWrite(ID_EX_RegWrite),
+        .idExRd(ID_EX_Rd),
+        .exMemMemRead(EX_MEM_MemRead),
+        .exMemRd(EX_MEM_Rd),
+        .loadUseStall(loadUseStall),
+        .branchStall(branchStall),
+        .stall(stall)
+    );
+
+    // ID-stage forwarding for the branch comparator / JALR base.
+    // A load in EX_MEM is never forwarded here (HazardUnit stalls instead).
+    assign exMemFwdEn = EX_MEM_RegWrite & ~EX_MEM_WbFromMem;
+
+    ForwardingUnit idForwarding(
+        .idExRs1(IF_ID_Inst[19:15]),
+        .idExRs2(IF_ID_Inst[24:20]),
+        .exMemRd(EX_MEM_Rd),
+        .memWbRd(MEM_WB_Rd),
+        .exMemRegWrite(exMemFwdEn),
+        .memWbRegWrite(MEM_WB_RegWrite),
+        .forwardA(idForwardA),
+        .forwardB(idForwardB)
+    );
+
+    assign idRs1Val = (idForwardA == 2'b10) ? EX_MEM_Result :
+                      (idForwardA == 2'b01) ? regWriteData  : readData1;
+    assign idRs2Val = (idForwardB == 2'b10) ? EX_MEM_Result :
+                      (idForwardB == 2'b01) ? regWriteData  : readData2;
+
+    BranchUnit branchComparator(
+        .branch(idBranch),
+        .funct3(IF_ID_Inst[14:12]),
+        .readData1(idRs1Val),
+        .readData2(idRs2Val),
+        .takeBranch(idTakeBranch)
+    );
+
+    assign idActualTaken  = idTakeBranch | idIsJal | idIsJalr;
+    assign idActualTarget = (idIsJalr) ? ((idRs1Val + immGenOut) & ~32'd1)
+                                       : (IF_ID_PC + immGenOut);
+    assign idActualNextPC = (idActualTaken) ? idActualTarget : (IF_ID_PC + 32'd4);
+    assign idIsCtrlFlow   = idBranch | idIsJal | idIsJalr;
+    assign redirect       = idIsCtrlFlow & ~stall &
+                            (idActualNextPC != IF_ID_PredNextPC);
+    assign bpUpdateEn     = advance & ~stall & (idBranch | idIsJal);
 
     // ECALL / EBREAK: stop fetching once the halt instruction is past any
     // older branch (a wrong-path halt must not stick)
     assign haltNow = haltLatch | (idHalt & ~stall);
-    assign haltSet = advance & idHalt & ~stall & ~redirect;
+    assign haltSet = advance & idHalt & ~stall;
 
     DFlipFlop haltFF(
         .clk(clk),
@@ -288,7 +345,7 @@ module pipeline #(
     // ID/EX register
     // =========================================================================
     assign idExLoad  = advance;
-    assign idExFlush = advance & (redirect | stall);
+    assign idExFlush = advance & stall;
 
     PipelineReg #(205) ID_EX(
         .clk(clk),
@@ -345,26 +402,9 @@ module pipeline #(
         .zero(aluZero)
     );
 
-    BranchUnit branchComparator(
-        .branch(ID_EX_Branch),
-        .funct3(ID_EX_Inst[14:12]),
-        .readData1(fwdRs1),
-        .readData2(fwdRs2),
-        .takeBranch(exTakeBranch)
-    );
-
     // Final non-memory result (so forwarding is right for JAL/JALR/LUI too)
     assign exResult = (ID_EX_MemToReg == `WB_PC4) ? ID_EX_PC + 32'd4 :
                       (ID_EX_MemToReg == `WB_IMM) ? ID_EX_Imm        : aluOutput;
-
-    // Branch / jump resolution
-    assign actualTaken  = exTakeBranch | ID_EX_IsJal | ID_EX_IsJalr;
-    assign actualTarget = (ID_EX_IsJalr) ? ((fwdRs1 + ID_EX_Imm) & ~32'd1)
-                                         : (ID_EX_PC + ID_EX_Imm);
-    assign actualNextPC = (actualTaken) ? actualTarget : (ID_EX_PC + 32'd4);
-    assign isCtrlFlow   = ID_EX_Branch | ID_EX_IsJal | ID_EX_IsJalr;
-    assign redirect     = isCtrlFlow & (actualNextPC != ID_EX_PredNextPC);
-    assign bpUpdateEn   = advance & (ID_EX_Branch | ID_EX_IsJal);
 
     // =========================================================================
     // EX/MEM register

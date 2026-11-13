@@ -53,8 +53,8 @@
 [PASS] BP off: every taken branch = 5
 [PASS] predictor reduces total cycles
 [PASS] predictor on/off end with identical regs
-       bne loop: BP on : cycles=52 retired=21 CPI=2.476190 mispredicts=2 stalls=0
-       bne loop: BP off: cycles=64 retired=21 CPI=3.047619 mispredicts=5 stalls=0
+       bne loop: BP on : cycles=60 retired=21 CPI=2.857143 mispredicts=2 stalls=6
+       bne loop: BP off: cycles=66 retired=21 CPI=3.142857 mispredicts=5 stalls=6
 
 --- Test 7: jal-back loop with beq exit ---
 [PASS] jal loop accumulator: x1 = 0x00000014
@@ -63,8 +63,8 @@
 [PASS] BP on: first jal + final beq = 2
 [PASS] BP off: 4 jal + final beq = 5
 [PASS] predictor on/off end with identical regs
-       jal loop: BP on : cycles=50 retired=20 CPI=2.500000 mispredicts=2 stalls=0
-       jal loop: BP off: cycles=62 retired=20 CPI=3.100000 mispredicts=5 stalls=0
+       jal loop: BP on : cycles=48 retired=20 CPI=2.400000 mispredicts=2 stalls=1
+       jal loop: BP off: cycles=54 retired=20 CPI=2.700000 mispredicts=5 stalls=1
 
 --- Test 8: ECALL on a mispredicted path must not halt ---
 [PASS] wrong-path addi squashed: x5 = 0x00000000
@@ -95,14 +95,93 @@
 [PASS] BP on : all 31 registers match single-cycle
 [PASS] BP off: all 31 registers match single-cycle
 [PASS] data memory matches single-cycle (64 words)
-       full program: BP on : cycles=252 retired=111 CPI=2.270270 mispredicts=7 stalls=0
-       full program: BP off: cycles=252 retired=111 CPI=2.270270 mispredicts=7 stalls=0
+       full program: BP on : cycles=238 retired=111 CPI=2.144144 mispredicts=7 stalls=0
+       full program: BP off: cycles=238 retired=111 CPI=2.144144 mispredicts=7 stalls=0
+
+--- Test 12: ID-stage branch hazards (Bonus 4) ---
+[PASS] ALU-use branch taken, skip: x9 = 0x00000000
+[PASS] ALU-use branch target: x10 = 0x00000001
+[PASS] ALU->branch: 1 stall = 1
+[PASS] EX/MEM-forwarded branch skip: x9 = 0x00000000
+[PASS] ALU, gap, branch: 0 stalls = 0
+[PASS] load->branch taken, skip: x9 = 0x00000000
+[PASS] load->branch: 2 stalls = 2
+[PASS] load,gap,bne not taken: x9 = 0x00000007
+[PASS] load, gap, branch: 1 stall = 1
+[PASS] jalr ALU-use skip: x5 = 0x00000000
+[PASS] jalr ALU-use target: x6 = 0x00000003
+[PASS] ALU->jalr: 1 stall = 1
+[PASS] predictor on/off end with identical regs
+[PASS] squashed fall-through: x9 = 0x00000000
+[PASS] one mispredict = 1
+[PASS] cycles: 2 instr + 1 squash slot + fill = 8
+
+--- Test 13: every branch type, operand distance 0 / 1 / 2 / 3 ---
+       distance 0 (ALU result right before the branch)
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 0: one stall per branch = 12
+       distance 1 (EX/MEM forward)
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 1: no stalls = 0
+       distance 2 (MEM/WB or register file)
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 2: no stalls = 0
+       distance 3
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 3: no stalls = 0
+
+--- Test 14: JALR base comes from a load (2 stalls) ---
+[PASS] jalr link: x2 = 0x00000008
+[PASS] skipped instructions: x5 = 0x00000000
+[PASS] skipped instruction 2: x7 = 0x00000000
+[PASS] jalr target executed: x6 = 0x00000003
+[PASS] load->jalr: 2 stalls = 2
+[PASS] predictor on/off end with identical regs
+
+--- Test 15: load two ahead of a branch needs no stall ---
+[PASS] taken, skipped: x9 = 0x00000000
+[PASS] target executed: x10 = 0x00000001
+[PASS] load, 2 gap, branch: 0 stalls = 0
+[PASS] predictor on/off end with identical regs
+
+--- Test 16: EBREAK (rs2 field = 1) behind a load into x1 must not stall ---
+[PASS] lw before ebreak: x1 = 0x0000000a
+[PASS] no spurious stall for ebreak = 0
+[PASS] halts at cycle 2 * (N + 2) = 6
+
+--- Test 17: branch whose target is another branch ---
+[PASS] first branch skip: x9 = 0x00000000
+[PASS] branch at branch target skip: x10 = 0x00000000
+[PASS] reached: x11 = 0x00000001
+[PASS] jal skip: x12 = 0x00000000
+[PASS] reached after jal: x13 = 0x00000001
+[PASS] three cold control transfers = 3
+[PASS] predictor on/off end with identical regs
+
+--- Test 18: a correctly predicted taken branch has no squash ---
+[PASS] loop counter: x1 = 0x00000000
+[PASS] BP on: first taken + exit = 2
+[PASS] BP off: 11 taken branches = 11
+[PASS] saved 2 cycles per avoided mispredict = 18
+[PASS] predictor on/off end with identical regs
+       predicted loop: BP on : cycles=86 retired=40 CPI=2.150000 mispredicts=2 stalls=0
+       predicted loop: BP off: cycles=104 retired=40 CPI=2.600000 mispredicts=11 stalls=0
+
+--- Test 19: JALR clears bit 0 of the target ---
+[PASS] jalr link: x2 = 0x0000000c
+[PASS] skipped: x5 = 0x00000000
+[PASS] landed on 16, not 17: x6 = 0x00000003
+[PASS] predictor on/off end with identical regs
 
 --- Structural checks over the whole run ---
 [PASS] memory writes during C0 (fetch) = 0
 [PASS] PC changes outside end of C1 = 0
 
 =================================================
-ALL 67 CHECKS PASSED
+ALL 124 CHECKS PASSED
 =================================================
-pipeline_tb.v:750: $finish called at 8260000 (1ps)
+pipeline_tb.v:1065: $finish called at 19640000 (1ps)

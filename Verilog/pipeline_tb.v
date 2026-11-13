@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Module: pipeline_tb.v
  * Project: femtoRV32
- * Author: Kareem Elramly
+ * Author: Kareem Elramly, Mohamed AboElfotouh
  * Description: Self-checking testbench for the pipelined femtoRV32.
  *              Two pipelines run side by side on the same clock:
  *                dut   : BP_ENABLE = 1 (BTB + 2-bit BHT)
@@ -13,6 +13,8 @@
  *
  * Change history:
  *   11/13/26 - Directed hazard tests, predictor tests, regression vs datapath
+ *   11/13/26 - Bonus 4: ID-stage branch tests (all branch types, every
+ *              forwarding distance, JALR, EBREAK, back-to-back branches)
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -41,7 +43,7 @@ module PerfMonitor(
             stalls  <= 32'd0;
         end else if (!halt) begin
             cycles <= cycles + 32'd1;
-            if (advance && idValid && !stall && !redirect) begin
+            if (advance && idValid && !stall) begin
                 retired <= retired + 32'd1;
             end
             if (advance && redirect) begin
@@ -706,6 +708,311 @@ module pipeline_tb;
         end
     endtask
 
+
+    task test12_id_branch_hazards;
+        begin
+            $display("\n--- Test 12: ID-stage branch hazards (Bonus 4) ---");
+            // (a) ALU result right before a branch: 1 stall, then EX/MEM forward
+            startProg;
+            emit(ADDI(1, 0, 3));          //  0
+            emit(ADDI(2, 0, 3));          //  4
+            emit(BEQ(1, 2, 8));           //  8: x2 in EX -> stall, taken to 16
+            emit(ADDI(9, 0, 99));         // 12: skipped
+            emit(ADDI(10, 0, 1));         // 16
+            emit(ECALL);
+            runProg;
+            expectReg(9, 32'd0, "ALU-use branch taken, skip");
+            expectReg(10, 32'd1, "ALU-use branch target");
+            expectCount(onStalls, 1, "ALU->branch: 1 stall");
+            // (b) one instruction gap: forwarded from EX/MEM, no stall
+            startProg;
+            emit(ADDI(1, 0, 3));
+            emit(ADDI(2, 0, 3));
+            emit(NOP(0));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(9, 0, 99));
+            emit(ADDI(10, 0, 1));
+            emit(ECALL);
+            runProg;
+            expectReg(9, 32'd0, "EX/MEM-forwarded branch skip");
+            expectCount(onStalls, 0, "ALU, gap, branch: 0 stalls");
+            // (c) load right before a branch: 2 stalls
+            startProg;
+            emit(LW(1, 512, 0));          // x1 = 10
+            emit(ADDI(2, 0, 10));
+            emit(LW(3, 512, 0));          // x3 = 10
+            emit(BEQ(3, 2, 8));           // load in EX, then in MEM
+            emit(ADDI(9, 0, 99));
+            emit(ADDI(10, 0, 1));
+            emit(ECALL);
+            runProg;
+            expectReg(9, 32'd0, "load->branch taken, skip");
+            expectCount(onStalls, 2, "load->branch: 2 stalls");
+            // (d) load, gap, branch: 1 stall
+            startProg;
+            emit(ADDI(2, 0, 10));
+            emit(LW(3, 512, 0));
+            emit(NOP(0));
+            emit(BNE(3, 2, 8));           // not taken
+            emit(ADDI(9, 0, 7));
+            emit(ECALL);
+            runProg;
+            expectReg(9, 32'd7, "load,gap,bne not taken");
+            expectCount(onStalls, 1, "load, gap, branch: 1 stall");
+            // (e) JALR base from ALU right before it: 1 stall
+            startProg;
+            emit(ADDI(1, 0, 16));         //  0
+            emit(JALR(2, 1, 0));          //  4: stall, jump to 16
+            emit(ADDI(5, 0, 1));          //  8
+            emit(ADDI(5, 0, 2));          // 12
+            emit(ADDI(6, 0, 3));          // 16
+            emit(ECALL);
+            runProg;
+            expectReg(5, 32'd0, "jalr ALU-use skip");
+            expectReg(6, 32'd3, "jalr ALU-use target");
+            expectCount(onStalls, 1, "ALU->jalr: 1 stall");
+            expectTwinsEqual;
+            // (f) mispredict penalty is 1 slot (2 cycles) when resolved in ID
+            startProg;
+            emit(BEQ(0, 0, 8));           //  0: cold, taken -> mispredict
+            emit(ADDI(9, 0, 99));         //  4: squashed in IF
+            emit(ECALL);                  //  8
+            runProg;
+            expectReg(9, 32'd0, "squashed fall-through");
+            expectCount(onMispred, 1, "one mispredict");
+            expectCount(onCycles, 8, "cycles: 2 instr + 1 squash slot + fill");
+        end
+    endtask
+
+    // ---- Branch kinds for the exhaustive suite ----
+    // kind: 0 BEQ, 1 BNE, 2 BLT, 3 BGE, 4 BLTU, 5 BGEU
+    function [31:0] brInst(input integer kind, input integer rs1, input integer rs2,
+                           input integer off);
+        begin
+            case (kind)
+                0: brInst = BEQ(rs1, rs2, off);
+                1: brInst = BNE(rs1, rs2, off);
+                2: brInst = encB(off, rs2, rs1, 3'b100);
+                3: brInst = encB(off, rs2, rs1, 3'b101);
+                4: brInst = encB(off, rs2, rs1, 3'b110);
+                default: brInst = encB(off, rs2, rs1, 3'b111);
+            endcase
+        end
+    endfunction
+
+    function brTaken(input integer kind, input integer a, input integer b);
+        reg [31:0] ua, ub;
+        begin
+            ua = a; ub = b;
+            case (kind)
+                0: brTaken = (ua == ub);
+                1: brTaken = (ua != ub);
+                2: brTaken = ($signed(ua) <  $signed(ub));
+                3: brTaken = ($signed(ua) >= $signed(ub));
+                4: brTaken = (ua <  ub);
+                default: brTaken = (ua >= ub);
+            endcase
+        end
+    endfunction
+
+    // 6 branch kinds x 2 outcomes. Operands are produced by ADDIs placed
+    // `gap` NOPs before the branch (gap 0 = stall, 1 = EX/MEM forward,
+    // 2+ = MEM/WB forward or register file).
+    task branchSuite(input integer gap);
+        integer kind, c, j, a, b, idx;
+        integer bad;
+        begin
+            startProg;
+            idx = 0;
+            for (kind = 0; kind < 6; kind = kind + 1) begin
+                for (c = 0; c < 2; c = c + 1) begin
+                    case (kind)
+                        0: begin a = 5;  b = (c == 0) ? 5 : 6; end
+                        1: begin a = 5;  b = (c == 0) ? 6 : 5; end
+                        2: begin a = (c == 0) ? -1 : 1;  b = (c == 0) ? 1 : -1; end
+                        3: begin a = (c == 0) ? 1 : -1;  b = (c == 0) ? -1 : 1; end
+                        4: begin a = (c == 0) ? 1 : -1;  b = (c == 0) ? -1 : 1; end
+                        default: begin a = (c == 0) ? -1 : 1; b = (c == 0) ? 1 : -1; end
+                    endcase
+                    emit(ADDI(1, 0, a));
+                    emit(ADDI(2, 0, b));
+                    for (j = 0; j < gap; j = j + 1) emit(NOP(0));
+                    emit(brInst(kind, 1, 2, 8));      // skips the next instruction if taken
+                    emit(ADDI(10 + idx, 0, 1));       // x(10+idx) = 1 only if NOT taken
+                    idx = idx + 1;
+                end
+            end
+            emit(ECALL);
+            runProg;
+            bad = 0;
+            idx = 0;
+            for (kind = 0; kind < 6; kind = kind + 1) begin
+                for (c = 0; c < 2; c = c + 1) begin
+                    case (kind)
+                        0: begin a = 5;  b = (c == 0) ? 5 : 6; end
+                        1: begin a = 5;  b = (c == 0) ? 6 : 5; end
+                        2: begin a = (c == 0) ? -1 : 1;  b = (c == 0) ? 1 : -1; end
+                        3: begin a = (c == 0) ? 1 : -1;  b = (c == 0) ? -1 : 1; end
+                        4: begin a = (c == 0) ? 1 : -1;  b = (c == 0) ? -1 : 1; end
+                        default: begin a = (c == 0) ? -1 : 1; b = (c == 0) ? 1 : -1; end
+                    endcase
+                    if (rgOn(10 + idx) !== (brTaken(kind, a, b) ? 32'd0 : 32'd1) ||
+                        rgOff(10 + idx) !== (brTaken(kind, a, b) ? 32'd0 : 32'd1)) begin
+                        bad = bad + 1;
+                        $display("       kind %0d case %0d: x%0d on=%0d off=%0d, expected %0d",
+                                 kind, c, 10 + idx, rgOn(10 + idx), rgOff(10 + idx),
+                                 brTaken(kind, a, b) ? 0 : 1);
+                    end
+                    idx = idx + 1;
+                end
+            end
+            check(bad == 0, "all 6 branch kinds x taken/not-taken correct");
+            expectTwinsEqual;
+        end
+    endtask
+
+    task test13_branch_suite;
+        begin
+            $display("\n--- Test 13: every branch type, operand distance 0 / 1 / 2 / 3 ---");
+            $display("       distance 0 (ALU result right before the branch)");
+            branchSuite(0);
+            expectCount(onStalls, 12, "gap 0: one stall per branch");
+            $display("       distance 1 (EX/MEM forward)");
+            branchSuite(1);
+            expectCount(onStalls, 0, "gap 1: no stalls");
+            $display("       distance 2 (MEM/WB or register file)");
+            branchSuite(2);
+            expectCount(onStalls, 0, "gap 2: no stalls");
+            $display("       distance 3");
+            branchSuite(3);
+            expectCount(onStalls, 0, "gap 3: no stalls");
+        end
+    endtask
+
+    task test14_jalr_load;
+        begin
+            $display("\n--- Test 14: JALR base comes from a load (2 stalls) ---");
+            startProg;
+            wr32(10'h220, 32'd24);        // jump target stored in data memory
+            emit(LW(1, 544, 0));          //  0: x1 = 24
+            emit(JALR(2, 1, 0));          //  4: load in EX then MEM -> 2 stalls
+            emit(ADDI(5, 0, 1));          //  8: skipped
+            emit(ADDI(5, 0, 2));          // 12: skipped
+            emit(ADDI(7, 0, 5));          // 16: skipped
+            emit(NOP(0));                 // 20: skipped
+            emit(ADDI(6, 0, 3));          // 24
+            emit(ECALL);                  // 28
+            runProg;
+            expectReg(2, 32'd8, "jalr link");
+            expectReg(5, 32'd0, "skipped instructions");
+            expectReg(7, 32'd0, "skipped instruction 2");
+            expectReg(6, 32'd3, "jalr target executed");
+            expectCount(onStalls, 2, "load->jalr: 2 stalls");
+            expectTwinsEqual;
+        end
+    endtask
+
+    task test15_load_gap2_branch;
+        begin
+            $display("\n--- Test 15: load two ahead of a branch needs no stall ---");
+            startProg;
+            emit(ADDI(2, 0, 10));
+            emit(LW(3, 512, 0));          // x3 = 10
+            emit(NOP(0));
+            emit(NOP(0));
+            emit(BEQ(3, 2, 8));           // taken
+            emit(ADDI(9, 0, 99));         // skipped
+            emit(ADDI(10, 0, 1));
+            emit(ECALL);
+            runProg;
+            expectReg(9, 32'd0, "taken, skipped");
+            expectReg(10, 32'd1, "target executed");
+            expectCount(onStalls, 0, "load, 2 gap, branch: 0 stalls");
+            expectTwinsEqual;
+        end
+    endtask
+
+    task test16_ebreak_no_spurious_stall;
+        begin
+            $display("\n--- Test 16: EBREAK (rs2 field = 1) behind a load into x1 must not stall ---");
+            startProg;
+            emit(LW(1, 512, 0));          // x1 = 10, rd matches EBREAK's rs2 field
+            emit(32'h00100073);           // EBREAK
+            runProg;
+            expectReg(1, 32'd10, "lw before ebreak");
+            expectCount(onStalls, 0, "no spurious stall for ebreak");
+            expectCount(onCycles, 6, "halts at cycle 2 * (N + 2)");
+        end
+    endtask
+
+    task test19_jalr_odd_base;
+        begin
+            $display("\n--- Test 19: JALR clears bit 0 of the target ---");
+            startProg;
+            emit(ADDI(1, 0, 17));         //  0: odd base
+            emit(NOP(0));                 //  4
+            emit(JALR(2, 1, 0));          //  8: target 17 & ~1 = 16
+            emit(ADDI(5, 0, 1));          // 12: skipped
+            emit(ADDI(6, 0, 3));          // 16
+            emit(ECALL);                  // 20
+            runProg;
+            expectReg(2, 32'd12, "jalr link");
+            expectReg(5, 32'd0, "skipped");
+            expectReg(6, 32'd3, "landed on 16, not 17");
+            expectTwinsEqual;
+        end
+    endtask
+
+    task test17_back_to_back_branches;
+        begin
+            $display("\n--- Test 17: branch whose target is another branch ---");
+            startProg;
+            emit(ADDI(1, 0, 1));          //  0
+            emit(NOP(0));                 //  4
+            emit(BEQ(1, 1, 8));           //  8: taken to 16
+            emit(ADDI(9, 0, 99));         // 12: skipped
+            emit(BNE(1, 0, 8));           // 16: taken to 24 (branch is a branch target)
+            emit(ADDI(10, 0, 99));        // 20: skipped
+            emit(ADDI(11, 0, 1));         // 24
+            emit(JAL(0, 8));              // 28: to 36
+            emit(ADDI(12, 0, 99));        // 32: skipped
+            emit(ADDI(13, 0, 1));         // 36
+            emit(ECALL);
+            runProg;
+            expectReg(9, 32'd0, "first branch skip");
+            expectReg(10, 32'd0, "branch at branch target skip");
+            expectReg(11, 32'd1, "reached");
+            expectReg(12, 32'd0, "jal skip");
+            expectReg(13, 32'd1, "reached after jal");
+            expectCount(onMispred, 3, "three cold control transfers");
+            expectTwinsEqual;
+        end
+    endtask
+
+    task test18_no_penalty_when_predicted;
+        begin
+            $display("\n--- Test 18: a correctly predicted taken branch has no squash ---");
+            // 12-iteration loop: BP off mispredicts all 11 taken branches; BP on
+            // mispredicts only the first taken branch and the exit (2), so it
+            // avoids 9 mispredicts x 2 cycles (1 squashed slot) = 18 cycles.
+            startProg;
+            emit(ADDI(1, 0, 12));         //  0
+            emit(NOP(0));                 //  4
+            emit(NOP(0));                 //  8
+            emit(ADDI(1, 1, -1));         // 12
+            emit(NOP(0));                 // 16
+            emit(BNE(1, 0, -8));          // 20: back to 12 (x1 two ahead: forwarded)
+            emit(ECALL);                  // 24
+            runProg;
+            expectReg(1, 32'd0, "loop counter");
+            expectCount(onMispred, 2, "BP on: first taken + exit");
+            expectCount(offMispred, 11, "BP off: 11 taken branches");
+            expectCount(offCycles - onCycles, (11 - 2) * 2, "saved 2 cycles per avoided mispredict");
+            expectTwinsEqual;
+            report("predicted loop");
+        end
+    endtask
+
     // ------------------------------------------------------------------
     // Main
     // ------------------------------------------------------------------
@@ -735,6 +1042,14 @@ module pipeline_tb;
         test9_subword;
         test10_cpi;
         test11_regression;
+        test12_id_branch_hazards;
+        test13_branch_suite;
+        test14_jalr_load;
+        test15_load_gap2_branch;
+        test16_ebreak_no_spurious_stall;
+        test17_back_to_back_branches;
+        test18_no_penalty_when_predicted;
+        test19_jalr_odd_base;
 
         $display("\n--- Structural checks over the whole run ---");
         expectCount(portViol, 0, "memory writes during C0 (fetch)");
