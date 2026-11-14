@@ -12,3 +12,7 @@ October 31, 5:00 PM: Tb Result.
 Tested the implemented instructions. 
 November 2, 4:40 PM: Added Journal Log.
 Finalized the log detailing the design choices and project contributions.
+November 14, 1:37 PM: Updated Datapath_Board top module. 
+Updated the top module for our constraint file to our new pipelined processor. 
+November 14, 1:52 PM: Updated pipeline tb. 
+Added assembly instructions to test 2-bit predictor and hazard detection unit 

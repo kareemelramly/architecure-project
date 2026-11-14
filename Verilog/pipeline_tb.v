@@ -15,6 +15,10 @@
  *   11/13/26 - Directed hazard tests, predictor tests, regression vs datapath
  *   11/13/26 - Bonus 4: ID-stage branch tests (all branch types, every
  *              forwarding distance, JALR, EBREAK, back-to-back branches)
+ *   11/14/26 - Test 20: 2-bit predictor state walk (SNT -> ST) with a BHT
+ *              monitor, nested loops. Test 21: stale-value hazard cases
+ *              (add/lw directly before a branch) over 3 passes (cold + warm
+ *              predictor). Test 22: x0 write must not feed a branch.
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -115,6 +119,39 @@ module pipeline_tb;
         if (dut.isFetch && dut.memWriteEn) portViol = portViol + 1;
         if (!rst && !advSample && (dut.pcValue !== pcSample) && (pcSample !== 32'bx)) begin
             pcViol = pcViol + 1;
+        end
+    end
+
+    // ------------------------------------------------------------------
+    // Predictor update log (BP-on pipeline only).
+    // One entry per branch/JAL leaving ID: its PC, whether it was a
+    // mispredict, and the BHT counter AFTER the update (read 1 ns after the
+    // edge). Tests clear logCnt before running a program.
+    // ------------------------------------------------------------------
+    integer    logCnt;
+    reg [31:0] logPC    [0:255];
+    reg [1:0]  logState [0:255];
+    reg        logMis   [0:255];
+    reg        logTaken [0:255];
+    reg [31:0] lgPC;
+    reg        lgMis;
+    reg        lgTaken;
+    reg [3:0]  lgIdx;
+
+    always @(posedge clk) begin
+        if (!rst && dut.bpUpdateEn === 1'b1) begin
+            lgPC    = dut.IF_ID_PC;
+            lgMis   = dut.redirect;
+            lgTaken = dut.idActualTaken;
+            lgIdx   = dut.IF_ID_PC[5:2];
+            #1;
+            if (logCnt < 256) begin
+                logPC[logCnt]    = lgPC;
+                logState[logCnt] = dut.predictor.bht[lgIdx];
+                logMis[logCnt]   = lgMis;
+                logTaken[logCnt] = lgTaken;
+                logCnt = logCnt + 1;
+            end
         end
     end
 
@@ -1014,6 +1051,337 @@ module pipeline_tb;
     endtask
 
     // ------------------------------------------------------------------
+    // Test 20 helpers: expected BHT walk
+    // ------------------------------------------------------------------
+    // Outcome table for branch B (1 = taken), 13 entries
+    function walkOut(input integer n);
+        begin
+            case (n)
+                0, 1, 2:        walkOut = 1'b1;
+                3, 4, 5, 6:     walkOut = 1'b0;
+                7, 8, 9, 10:    walkOut = 1'b1;
+                11:             walkOut = 1'b0;
+                default:        walkOut = 1'b1;
+            endcase
+        end
+    endfunction
+
+    // Counter after the n-th update of B, and whether that update was a
+    // mispredict:  T,T,T,N,N,N,N,T,T,T,T,N,T
+    function [1:0] expBState(input integer n);
+        begin
+            case (n)
+                0:  expBState = 2'b10;   // allocate (weakly taken)
+                1:  expBState = 2'b11;
+                2:  expBState = 2'b11;
+                3:  expBState = 2'b10;
+                4:  expBState = 2'b01;
+                5:  expBState = 2'b00;   // strongly not taken
+                6:  expBState = 2'b00;   // saturated
+                7:  expBState = 2'b01;
+                8:  expBState = 2'b10;
+                9:  expBState = 2'b11;
+                10: expBState = 2'b11;
+                11: expBState = 2'b10;   // single anomaly
+                default: expBState = 2'b11;
+            endcase
+        end
+    endfunction
+
+    function expBMis(input integer n);
+        begin
+            case (n)
+                0, 3, 4, 7, 8, 11: expBMis = 1'b1;
+                default:           expBMis = 1'b0;
+            endcase
+        end
+    endfunction
+
+    // Inner loop branch: T,T,T,N repeated 4 times (state kept across outers)
+    function [1:0] expIBState(input integer n);
+        begin
+            expIBState = (n == 0 || (n % 4) == 3) ? 2'b10 : 2'b11;
+        end
+    endfunction
+
+    function expIBMis(input integer n);
+        begin
+            expIBMis = (n == 0 || (n % 4) == 3) ? 1'b1 : 1'b0;
+        end
+    endfunction
+
+    task test20_predictor_state_walk;
+        integer k;
+        integer nB, badB, nIB, badIB;
+        reg     sawSNT;
+        reg [1:0] lastB;
+        begin
+            $display("\n--- Test 20: 2-bit predictor state walk (SNT -> WNT -> WT -> ST), nested loops ---");
+            startProg;
+            // outcome table for branch B at 0x200 (1 = taken)
+            for (k = 0; k < 13; k = k + 1) begin
+                wr32(10'h200 + 4 * k, walkOut(k));
+            end
+            // ---- Part A: data-driven branch B inside loop J (PCs 0x24 / 0x30) ----
+            emit(ADDI(10, 0, 512));       // 0x00 outcome table pointer
+            emit(ADDI(11, 0, 0));         // 0x04 iteration counter
+            emit(ADDI(13, 0, 13));        // 0x08 N
+            emit(ADDI(20, 0, 0));         // 0x0C not-taken count
+            emit(ADDI(21, 0, 0));         // 0x10 iterations
+            emit(LW(6, 0, 10));           // 0x14 loopA: next outcome
+            emit(ADDI(10, 10, 4));        // 0x18
+            emit(ADDI(11, 11, 1));        // 0x1C
+            emit(NOP(0));                 // 0x20 keeps the lw 4 instructions from B
+            emit(BNE(6, 0, 8));           // 0x24 B: branch under test
+            emit(ADDI(20, 20, 1));        // 0x28 only when B not taken
+            emit(ADDI(21, 21, 1));        // 0x2C
+            emit(BNE(11, 13, -28));       // 0x30 J: loop back to 0x14
+            // ---- Part B: nested loops, inner exit pattern T,T,T,N ----
+            emit(ADDI(22, 0, 0));         // 0x34 total inner iterations
+            emit(ADDI(23, 0, 0));         // 0x38 outer counter
+            emit(ADDI(24, 0, 4));         // 0x3C M outer
+            emit(ADDI(25, 0, 4));         // 0x40 K inner
+            emit(ADDI(23, 23, 1));        // 0x44 outer:
+            emit(ADDI(26, 0, 0));         // 0x48
+            emit(ADDI(26, 26, 1));        // 0x4C inner:
+            emit(ADDI(22, 22, 1));        // 0x50
+            emit(ADDI(27, 27, 3));        // 0x54 filler
+            emit(ADDI(28, 28, 7));        // 0x58 filler
+            emit(BNE(26, 25, -16));       // 0x5C IB: inner loop-back
+            emit(BNE(23, 24, -28));       // 0x60 OB: outer loop-back
+            emit(ECALL);                  // 0x64
+            logCnt = 0;
+            runProg;
+
+            expectReg(20, 32'd5, "B not-taken count");
+            expectReg(21, 32'd13, "iterations");
+            expectReg(22, 32'd16, "inner iterations (4 x 4)");
+            expectReg(23, 32'd4, "outer iterations");
+            expectReg(27, 32'd48, "inner filler x27");
+            expectReg(28, 32'd112, "inner filler x28");
+            expectCount(onStalls, 0, "no hazard stalls (pure predictor)");
+            expectCount(onMispred, 15, "BP on: B 6 + J 2 + IB 5 + OB 2");
+            expectCount(offMispred, 35, "BP off: 8 + 12 + 12 + 3 taken");
+
+            // ---- BHT walk of B (PC 0x24) and of the inner branch (PC 0x5C) ----
+            nB = 0; badB = 0; nIB = 0; badIB = 0;
+            sawSNT = 1'b0; lastB = 2'b00;
+            for (k = 0; k < logCnt; k = k + 1) begin
+                if (logPC[k] === 32'h24) begin
+                    if (nB < 13 && (logState[k] !== expBState(nB) || logMis[k] !== expBMis(nB))) begin
+                        badB = badB + 1;
+                        $display("       B  #%0d: state=%b mis=%b, expected state=%b mis=%b",
+                                 nB, logState[k], logMis[k], expBState(nB), expBMis(nB));
+                    end
+                    if (logState[k] === 2'b00) sawSNT = 1'b1;
+                    lastB = logState[k];
+                    nB = nB + 1;
+                end
+                if (logPC[k] === 32'h5C) begin
+                    if (nIB < 16 && (logState[k] !== expIBState(nIB) || logMis[k] !== expIBMis(nIB))) begin
+                        badIB = badIB + 1;
+                        $display("       IB #%0d: state=%b mis=%b, expected state=%b mis=%b",
+                                 nIB, logState[k], logMis[k], expIBState(nIB), expIBMis(nIB));
+                    end
+                    nIB = nIB + 1;
+                end
+            end
+            check(nB == 13 && badB == 0, "branch B: state walk and mispredicts match");
+            check(sawSNT && lastB == 2'b11, "B reached 00 (SNT) and returned to 11 (ST)");
+            check(nIB == 16 && badIB == 0, "inner branch: 10,11,11,10 then 11,11,11,10");
+            expectTwinsEqual;
+            report("predictor walk");
+        end
+    endtask
+
+    // ------------------------------------------------------------------
+    // Test 21 helpers: keep every TAKEN branch in its own BTB slot
+    // (index = PC[5:2]) so the warm passes are not disturbed by aliasing.
+    // padT(k): the branch will sit k instructions after the current point.
+    // ------------------------------------------------------------------
+    reg [15:0] usedIdx;
+    integer    topAddr;
+    integer    pcA;
+
+    task padT(input integer k);
+        integer slotIdx;
+        begin
+            slotIdx = ((progPtr + 4 * k) >> 2) & 15;
+            while (usedIdx[slotIdx]) begin
+                emit(NOP(0));
+                slotIdx = ((progPtr + 4 * k) >> 2) & 15;
+            end
+            usedIdx[slotIdx] = 1'b1;
+        end
+    endtask
+
+    // Stale value first, then a producer (add/addi/lw) directly before the
+    // branch. A branch that used the stale value flips its outcome:
+    //   TAKEN case     : fall-through marker  x30 += 1   (FAIL mark)
+    //   NOT-TAKEN case : fall-through marker  x29 += 1   (PASS mark)
+    // Block runs 3 times: pass 1 cold predictor, passes 2-3 warm.
+    task test21_stale_value_hazards;
+        begin
+            $display("\n--- Test 21: add/lw directly before a branch, stale values, cold + warm predictor ---");
+            startProg;
+            wr32(10'h200, 32'd10);
+            wr32(10'h204, 32'd10);
+            wr32(10'h208, 32'd20);
+            wr32(10'h20C, 32'hFFFFFFFB);
+            wr32(10'h210, 32'd0);
+            usedIdx = 16'd0;
+
+            emit(ADDI(10, 0, 512));       // data base
+            emit(ADDI(27, 0, 3));         // 3 passes
+            emit(ADDI(28, 0, 0));         // pass counter
+            emit(ADDI(29, 0, 0));         // NOT-TAKEN pass marks (expect 9)
+            emit(ADDI(30, 0, 0));         // FAIL marks (expect 0)
+            emit(ADDI(3, 0, 10));         // constant used by the lw cases
+            topAddr = progPtr;
+            emit(ADDI(28, 28, 1));        // top:
+
+            // 1: ALU -> beq, distance 1, rs1.  Taken.  1 stall
+            padT(3);
+            emit(ADDI(1, 0, 1));
+            emit(ADDI(2, 0, 5));
+            emit(ADDI(1, 2, 0));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 2: ALU -> bne, distance 1.  Not taken (stale would be taken).  1 stall
+            emit(ADDI(1, 0, 1));
+            emit(ADDI(2, 0, 5));
+            emit(ADDI(1, 2, 0));
+            emit(BNE(1, 2, 8));
+            emit(ADDI(29, 29, 1));
+            // 3: add -> beq, distance 2 (EX/MEM forward).  Taken.  0 stalls
+            padT(4);
+            emit(ADDI(1, 0, 1));
+            emit(ADDI(2, 0, 9));
+            emit(ADD(1, 2, 0));
+            emit(ADDI(4, 4, 1));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 4: ALU -> blt, distance 3 (MEM/WB forward).  Taken.  0 stalls
+            padT(5);
+            emit(ADDI(1, 0, 100));
+            emit(ADDI(2, 0, 50));
+            emit(ADDI(1, 0, 3));
+            emit(ADDI(4, 4, 1));
+            emit(ADDI(4, 4, 1));
+            emit(brInst(2, 1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 5: ALU -> beq, distance 1, rs2 forwarded.  Taken.  1 stall
+            padT(3);
+            emit(ADDI(1, 0, 4));
+            emit(ADDI(2, 0, 8));
+            emit(ADDI(2, 0, 4));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 6: both operands forwarded (rs1 distance 2, rs2 distance 1).  Taken.  1 stall
+            padT(4);
+            emit(ADDI(1, 0, 1));
+            emit(ADDI(2, 0, 2));
+            emit(ADDI(1, 0, 6));
+            emit(ADDI(2, 0, 6));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 7: two writers of the same rd, branch needs the newest.  Taken.  1 stall
+            padT(3);
+            emit(ADDI(2, 0, 7));
+            emit(ADDI(1, 0, 2));
+            emit(ADDI(1, 0, 7));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 8: lw -> bne, distance 1.  Taken.  2 stalls
+            padT(2);
+            emit(ADDI(1, 0, 0));
+            emit(LW(1, 0, 10));
+            emit(BNE(1, 0, 8));
+            emit(ADDI(30, 30, 1));
+            // 9: lw -> bne, distance 1.  Not taken (value 0, stale 5 would be taken).  2 stalls
+            emit(ADDI(1, 0, 5));
+            emit(LW(1, 16, 10));
+            emit(BNE(1, 0, 8));
+            emit(ADDI(29, 29, 1));
+            // 10: lw -> beq, distance 2.  Taken.  1 stall
+            padT(3);
+            emit(ADDI(2, 0, 99));
+            emit(LW(2, 4, 10));
+            emit(ADDI(4, 4, 1));
+            emit(BEQ(2, 3, 8));
+            emit(ADDI(30, 30, 1));
+            // 11: lw -> beq, distance 3 (MEM/WB load-data forward).  Taken.  0 stalls
+            padT(4);
+            emit(ADDI(2, 0, 99));
+            emit(LW(2, 4, 10));
+            emit(ADDI(4, 4, 1));
+            emit(ADDI(4, 4, 1));
+            emit(BEQ(2, 3, 8));
+            emit(ADDI(30, 30, 1));
+            // 12: lw of a negative value -> blt, distance 1.  Taken.  2 stalls
+            padT(2);
+            emit(ADDI(1, 0, 1));
+            emit(LW(1, 12, 10));
+            emit(brInst(2, 1, 0, 8));
+            emit(ADDI(30, 30, 1));
+            // 13: lw (rs1, distance 2) + addi (rs2, distance 1).  Taken.  1 stall
+            padT(4);
+            emit(ADDI(1, 0, 3));
+            emit(ADDI(2, 0, 99));
+            emit(LW(1, 0, 10));
+            emit(ADDI(2, 0, 10));
+            emit(BEQ(1, 2, 8));
+            emit(ADDI(30, 30, 1));
+            // 14: ALU -> blt, distance 2.  Not taken (stale 1 would be taken).  0 stalls
+            emit(ADDI(1, 0, 1));
+            emit(ADDI(2, 0, 50));
+            emit(ADDI(1, 0, 80));
+            emit(ADDI(4, 4, 1));
+            emit(brInst(2, 1, 2, 8));
+            emit(ADDI(29, 29, 1));
+            // 15: ALU -> jalr base, distance 1.  Must land on the target.  1 stall
+            pcA = progPtr;
+            emit(ADDI(5, 0, pcA + 12));   // stale base: points at the fail marker
+            emit(ADDI(5, 0, pcA + 16));   // producer: real target
+            emit(JALR(0, 5, 0));
+            emit(ADDI(30, 30, 1));        // fail marker
+            // loop back (target of the jalr is the instruction after the marker)
+            padT(0);
+            emit(BNE(28, 27, topAddr - progPtr));
+            emit(ECALL);
+            runProg;
+
+            expectReg(28, 32'd3, "passes completed");
+            expectReg(30, 32'd0, "FAIL marks (taken case fell through)");
+            expectReg(29, 32'd9, "NOT-TAKEN passes: 3 cases x 3");
+            expectReg(4, 32'd21, "independent fillers executed");
+            expectCount(onStalls, 42, "stalls: 14 per pass x 3 passes");
+            expectCount(offStalls, 42, "stalls independent of predictor");
+            expectCount(onMispred, 16, "BP on: 11 cold + 3 jalr + 2 loop");
+            expectCount(offMispred, 38, "BP off: 33 taken + 3 jalr + 2 loop");
+            check(onMispred < offMispred, "warm predictor avoids mispredicts while stalled");
+            expectTwinsEqual;
+            report("stale-value hazards");
+        end
+    endtask
+
+    task test22_x0_write_branch;
+        begin
+            $display("\n--- Test 22: a discarded write to x0 must not feed a branch ---");
+            startProg;
+            emit(ADDI(5, 0, 0));          //  0
+            emit(ADDI(0, 0, 7));          //  4: discarded write
+            emit(BEQ(0, 5, 8));           //  8: x0 (=0) == x5 (=0) -> taken, skips next
+            emit(ADDI(30, 0, 1));         // 12: executes only if x0 was forwarded as 7
+            emit(ECALL);                  // 16
+            runProg;
+            expectReg(30, 32'd0, "branch ignores discarded x0 write");
+            expectTwinsEqual;
+            $display("       info: x0-write -> branch stall slots = %0d (0 = no spurious stall)", onStalls);
+        end
+    endtask
+
+    // ------------------------------------------------------------------
     // Main
     // ------------------------------------------------------------------
     initial begin
@@ -1022,6 +1390,7 @@ module pipeline_tb;
         timeouts = 0;
         portViol = 0;
         pcViol   = 0;
+        logCnt   = 0;
         rst      = 1'b1;
         rstRef   = 1'b1;   // reference stays in reset until the regression
 
@@ -1050,6 +1419,9 @@ module pipeline_tb;
         test17_back_to_back_branches;
         test18_no_penalty_when_predicted;
         test19_jalr_odd_base;
+        test20_predictor_state_walk;
+        test21_stale_value_hazards;
+        test22_x0_write_branch;
 
         $display("\n--- Structural checks over the whole run ---");
         expectCount(portViol, 0, "memory writes during C0 (fetch)");
