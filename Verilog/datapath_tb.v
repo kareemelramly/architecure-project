@@ -131,8 +131,13 @@ module datapath_tb();
             cycles = cycles + 1;
         end
 
-        check("ECALL halt before timeout", {31'b0, CPU.halt}, 32'd1);
-        if (CPU.halt && CPU.instMemoryOut == 32'h00000073) begin
+        check("EBREAK halt before timeout", {31'b0, CPU.halt}, 32'd1);
+        if (CPU.halt && CPU.instMemoryOut == 32'h00100073) begin
+            covered[39] = 1'b1;
+        end
+        // ECALL (byte 468) sits right before the EBREAK: reaching byte 472
+        // proves it executed as a NOP instead of halting
+        if (CPU.pcValue == 32'd472) begin
             covered[38] = 1'b1;
         end
 
@@ -200,16 +205,16 @@ module datapath_tb();
         check("jal x1 link register", CPU.RegisterFile.d_reg[1], 32'd292);
         check("jal x0 keeps x0 zero", CPU.RegisterFile.d_reg[0], 32'd0);
 
-        $display("--- ECALL / Execution Bounds ---");
-        check("PC frozen on ECALL (byte 468)",          CPU.pcValue,                32'd468);
-        check("add after ECALL not executed (x18 = 8)", CPU.RegisterFile.d_reg[18], 32'd8);
+        $display("--- ECALL (NOP) / EBREAK (halt) / Execution Bounds ---");
+        check("PC frozen on EBREAK (byte 472)",          CPU.pcValue,                32'd472);
+        check("add after EBREAK not executed (x18 = 8)", CPU.RegisterFile.d_reg[18], 32'd8);
         check("x0 still zero",                          CPU.RegisterFile.d_reg[0],  32'd0);
 
         $display("--- Control unit decode ---");
         check_nop_decode("FENCE",     32'h0FF0000F, 1'b0);
         check_nop_decode("FENCE.TSO", 32'h8330000F, 1'b0);
         check_nop_decode("PAUSE",     32'h0100000F, 1'b0);
-        check_nop_decode("ECALL",     32'h00000073, 1'b1);
+        check_nop_decode("ECALL",     32'h00000073, 1'b0);
         check_nop_decode("EBREAK",    32'h00100073, 1'b1);
         check_nop_decode("CSRRW (not ECALL/EBREAK)", 32'h30051073, 1'b0);
 

@@ -9,6 +9,7 @@
  *   10/27/26 - Added BranchUnit and halt integration
  *   10/29/26 - Expanded multiplexers for LUI, AUIPC, JAL, JALR
  *   10/30/26 - Unified merge of all 42 base instructions and RV32M
+ *   11/16/26 - Tied off the RegFile debug port
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -90,7 +91,9 @@ module datapath(
         .writedata(regWriteData),
         .regwrite(regWrite),
         .readdata1(readData1),
-        .readdata2(readData2)
+        .readdata2(readData2),
+        .dbgReadReg(5'd0),
+        .dbgReadData()
     );
 
     ImmGen immGenerator(

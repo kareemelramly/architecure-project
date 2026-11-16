@@ -7,6 +7,7 @@
  * Change history:
  *   10/26/26 - Initial register file implementation
  *   11/01/26 - Ensured x0 is strictly hardwired to zero on reads and writes
+ *   11/16/26 - Added debug read port for the FPGA register viewer
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -22,7 +23,9 @@ module RegFile #(
     input  [4:0]  writereg,
     input  [N-1:0] writedata,
     output [N-1:0] readdata1,
-    output [N-1:0] readdata2
+    output [N-1:0] readdata2,
+    input  [4:0]  dbgReadReg,
+    output [N-1:0] dbgReadData
 );
 
     wire [N-1:0] d_reg [0:31];
@@ -53,5 +56,8 @@ module RegFile #(
 
     assign readdata1 = (readreg1 == 5'd0) ? {N{1'b0}} : d_reg[readreg1];
     assign readdata2 = (readreg2 == 5'd0) ? {N{1'b0}} : d_reg[readreg2];
+
+    // Debug-only third read port (board register viewer, never used by the CPU)
+    assign dbgReadData = (dbgReadReg == 5'd0) ? {N{1'b0}} : d_reg[dbgReadReg];
 
 endmodule

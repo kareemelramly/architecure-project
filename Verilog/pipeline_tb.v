@@ -2,7 +2,11 @@
  * Module: pipeline_tb.v
  * Project: femtoRV32
  * Author: Kareem Elramly, Mohamed AboElfotouh
- * Description: Self-checking testbench for the pipelined femtoRV32.
+ * Description: Self-checking testbench for the 3-stage pipelined femtoRV32.
+ *              Run it twice: -Ppipeline_tb.BRANCH_IN_ID=1 (Bonus 4, branches
+ *              resolved in ID) and =0 (branches resolved in EX, Bonus 3
+ *              predictor visible). Cycle / stall / mispredict expectations
+ *              depend on the mode; register and memory expectations do not.
  *              Two pipelines run side by side on the same clock:
  *                dut   : BP_ENABLE = 1 (BTB + 2-bit BHT)
  *                dutNo : BP_ENABLE = 0 (always predict not taken)
@@ -15,6 +19,11 @@
  *   11/13/26 - Directed hazard tests, predictor tests, regression vs datapath
  *   11/13/26 - Bonus 4: ID-stage branch tests (all branch types, every
  *              forwarding distance, JALR, EBREAK, back-to-back branches)
+ *   11/16/26 - 3-stage pipeline: BRANCH_IN_ID parameter, expectations
+ *              re-baselined (no load-use stall, 2(N+1) cycles, 0 / 1-slot
+ *              branch penalty), predictor log uses bpUpdatePC
+ *   11/16/26 - ECALL is a NOP: every program now ends with EBREAK; Test 23
+ *              checks ECALL/FENCE/FENCE.TSO/PAUSE as NOPs; Test 22 asserts 0 stalls
  *   11/14/26 - Test 20: 2-bit predictor state walk (SNT -> ST) with a BHT
  *              monitor, nested loops. Test 21: stale-value hazard cases
  *              (add/lw directly before a branch) over 3 passes (cold + warm
@@ -31,6 +40,7 @@ module PerfMonitor(
     input advance,
     input idValid,
     input stall,
+    input squash,
     input redirect,
     input halt,
     output reg [31:0] cycles,
@@ -47,7 +57,7 @@ module PerfMonitor(
             stalls  <= 32'd0;
         end else if (!halt) begin
             cycles <= cycles + 32'd1;
-            if (advance && idValid && !stall) begin
+            if (advance && idValid && !stall && !squash) begin
                 retired <= retired + 32'd1;
             end
             if (advance && redirect) begin
@@ -61,7 +71,9 @@ module PerfMonitor(
 
 endmodule
 
-module pipeline_tb;
+module pipeline_tb #(parameter BRANCH_IN_ID = 1);
+
+    localparam IDM = (BRANCH_IN_ID != 0);
 
     reg clk;
     reg rst;
@@ -74,8 +86,18 @@ module pipeline_tb;
     integer timeouts;
 
     // Device under test (predictor on), twin (predictor off), golden reference
-    pipeline #(.BP_ENABLE(1)) dut(.clk(clk), .reset(rst));
-    pipeline #(.BP_ENABLE(0)) dutNo(.clk(clk), .reset(rst));
+    pipeline #(.BP_ENABLE(1), .BRANCH_IN_ID(BRANCH_IN_ID)) dut(
+        .clk(clk), .reset(rst), .dbgRegSel(5'd0),
+        .dbgRegData(), .dbgPC(), .dbgNextPC(), .dbgInst(), .dbgAluResult(),
+        .dbgMemAddr(), .dbgMemOut(), .dbgWbData(), .dbgStoreData(),
+        .dbgCtrlFlags(), .dbgPipeFlags(), .dbgHalt()
+    );
+    pipeline #(.BP_ENABLE(0), .BRANCH_IN_ID(BRANCH_IN_ID)) dutNo(
+        .clk(clk), .reset(rst), .dbgRegSel(5'd0),
+        .dbgRegData(), .dbgPC(), .dbgNextPC(), .dbgInst(), .dbgAluResult(),
+        .dbgMemAddr(), .dbgMemOut(), .dbgWbData(), .dbgStoreData(),
+        .dbgCtrlFlags(), .dbgPipeFlags(), .dbgHalt()
+    );
     datapath refCpu(.clk(clk), .reset(rstRef));
 
     wire [31:0] onCycles, onRetired, onMispred, onStalls;
@@ -83,7 +105,7 @@ module pipeline_tb;
 
     PerfMonitor monOn(
         .clk(clk), .rst(rst),
-        .advance(dut.advance), .idValid(dut.idValid), .stall(dut.stall),
+        .advance(dut.advance), .idValid(dut.idValid), .stall(dut.stall), .squash(dut.squash),
         .redirect(dut.redirect), .halt(dut.haltLatch),
         .cycles(onCycles), .retired(onRetired),
         .mispred(onMispred), .stalls(onStalls)
@@ -91,7 +113,7 @@ module pipeline_tb;
 
     PerfMonitor monOff(
         .clk(clk), .rst(rst),
-        .advance(dutNo.advance), .idValid(dutNo.idValid), .stall(dutNo.stall),
+        .advance(dutNo.advance), .idValid(dutNo.idValid), .stall(dutNo.stall), .squash(dutNo.squash),
         .redirect(dutNo.redirect), .halt(dutNo.haltLatch),
         .cycles(offCycles), .retired(offRetired),
         .mispred(offMispred), .stalls(offStalls)
@@ -140,10 +162,10 @@ module pipeline_tb;
 
     always @(posedge clk) begin
         if (!rst && dut.bpUpdateEn === 1'b1) begin
-            lgPC    = dut.IF_ID_PC;
+            lgPC    = dut.bpUpdatePC;
             lgMis   = dut.redirect;
-            lgTaken = dut.idActualTaken;
-            lgIdx   = dut.IF_ID_PC[5:2];
+            lgTaken = dut.bpActualTaken;
+            lgIdx   = dut.bpUpdatePC[5:2];
             #1;
             if (logCnt < 256) begin
                 logPC[logCnt]    = lgPC;
@@ -164,7 +186,7 @@ module pipeline_tb;
             if (cond) begin
                 $display("[PASS] %0s", name);
             end else begin
-                errors = errors + 1;
+                errors = errors + 1; if ($test$plusargs("stopfail")) $finish;
                 $display("[FAIL] %0s", name);
             end
         end
@@ -208,7 +230,7 @@ module pipeline_tb;
             if (rgOn(n) === val && rgOff(n) === val) begin
                 $display("[PASS] %0s: x%0d = 0x%08h", name, n, val);
             end else begin
-                errors = errors + 1;
+                errors = errors + 1; if ($test$plusargs("stopfail")) $finish;
                 $display("[FAIL] %0s: x%0d on=0x%08h off=0x%08h expected=0x%08h",
                          name, n, rgOn(n), rgOff(n), val);
             end
@@ -221,7 +243,7 @@ module pipeline_tb;
             if (memWordOn(a) === val && memWordOff(a) === val) begin
                 $display("[PASS] %0s: mem[0x%03h] = 0x%08h", name, a, val);
             end else begin
-                errors = errors + 1;
+                errors = errors + 1; if ($test$plusargs("stopfail")) $finish;
                 $display("[FAIL] %0s: mem[0x%03h] on=0x%08h off=0x%08h expected=0x%08h",
                          name, a, memWordOn(a), memWordOff(a), val);
             end
@@ -234,7 +256,7 @@ module pipeline_tb;
             if (got === want) begin
                 $display("[PASS] %0s = %0d", name, got);
             end else begin
-                errors = errors + 1;
+                errors = errors + 1; if ($test$plusargs("stopfail")) $finish;
                 $display("[FAIL] %0s = %0d, expected %0d", name, got, want);
             end
         end
@@ -343,7 +365,11 @@ module pipeline_tb;
         begin LUI = {imm20[19:0], rd[4:0], 7'b0110111}; end
     endfunction
 
-    localparam [31:0] ECALL = 32'h00000073;
+    localparam [31:0] ECALL  = 32'h00000073;   // executes as a NOP
+    localparam [31:0] EBREAK = 32'h00100073;   // the only halting instruction
+    localparam [31:0] FENCE  = 32'h0FF0000F;   // NOP
+    localparam [31:0] FENCET = 32'h8330000F;   // FENCE.TSO, NOP
+    localparam [31:0] PAUSE  = 32'h0100000F;   // NOP
 
     // ------------------------------------------------------------------
     // Memory loading (both pipelines get the same image)
@@ -396,7 +422,7 @@ module pipeline_tb;
         end
     endtask
 
-    // Reset both pipelines, run until both have latched ECALL, then drain
+    // Reset both pipelines, run until both have latched EBREAK, then drain
     task runProg;
         begin
             rst = 1'b1;
@@ -411,7 +437,7 @@ module pipeline_tb;
             if (t >= 20000) begin
                 timeouts = timeouts + 1;
                 $display("[FAIL] timeout waiting for halt");
-                errors = errors + 1;
+                errors = errors + 1; if ($test$plusargs("stopfail")) $finish;
             end
             repeat (16) @(posedge clk);
             @(negedge clk);
@@ -438,31 +464,31 @@ module pipeline_tb;
 
     task test1_forwarding;
         begin
-            $display("\n--- Test 1: EX/MEM and MEM/WB forwarding, regfile distance 3, x0 guard ---");
+            $display("\n--- Test 1: MEM_WB forwarding (distance 1), RegFile (distance 2+), x0 guard ---");
             startProg;
             emit(ADDI(1, 0, 5));
             emit(ADDI(2, 0, 7));
-            emit(ADD(3, 1, 2));           // x1 from MEM/WB, x2 from EX/MEM
-            emit(ADD(5, 3, 2));           // x3 from EX/MEM
-            emit(ADD(6, 5, 3));           // x5 EX/MEM, x3 MEM/WB
+            emit(ADD(3, 1, 2));           // x2 from MEM_WB, x1 from RegFile
+            emit(ADD(5, 3, 2));           // x3 from MEM_WB
+            emit(ADD(6, 5, 3));           // x5 MEM_WB, x3 RegFile
             emit(ADDI(8, 0, 3));
             emit(NOP(0));
             emit(NOP(0));
-            emit(ADD(9, 8, 8));           // distance 3: regfile written in C0
+            emit(ADD(9, 8, 8));           // distance 3: RegFile written in C0
             emit(ADDI(11, 0, 1));
             emit(ADDI(11, 11, 1));
             emit(ADDI(11, 11, 1));
-            emit(ADD(10, 11, 11));        // EX/MEM must win over MEM/WB
+            emit(ADD(10, 11, 11));        // newest writer must win
             emit(ADDI(0, 0, 99));         // write to x0 must not be forwarded
             emit(ADD(12, 0, 1));
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
-            expectReg(3, 32'd12, "add fwd both operands");
-            expectReg(5, 32'd19, "add fwd from EX/MEM");
-            expectReg(6, 32'd31, "add fwd EX/MEM + MEM/WB");
+            expectReg(3, 32'd12, "add fwd + regfile operands");
+            expectReg(5, 32'd19, "add fwd from MEM_WB");
+            expectReg(6, 32'd31, "add fwd MEM_WB + regfile");
             expectReg(9, 32'd6, "distance-3 regfile path");
             expectReg(11, 32'd3, "chained addi forward");
-            expectReg(10, 32'd6, "EX/MEM priority over MEM/WB");
+            expectReg(10, 32'd6, "newest writer wins");
             expectReg(12, 32'd5, "x0 never forwarded");
             expectCount(onStalls, 0, "no stalls without loads");
             expectTwinsEqual;
@@ -472,23 +498,23 @@ module pipeline_tb;
 
     task test2_loaduse;
         begin
-            $display("\n--- Test 2: load-use hazard (one bubble) ---");
+            $display("\n--- Test 2: load-use needs no stall (load data forwarded from MEM_WB) ---");
             startProg;
             emit(ADDI(1, 0, 12));
             emit(LW(6, 512, 0));          // x6 = 10
-            emit(AND(7, 6, 1));           // load-use: stall, x7 = 10 & 12 = 8
-            emit(ADD(8, 7, 7));           // x7 from EX/MEM, no stall: 16
+            emit(AND(7, 6, 1));           // load-use: MEM_WB load data, x7 = 10 & 12 = 8
+            emit(ADD(8, 7, 7));           // x7 from MEM_WB: 16
             emit(LW(4, 516, 0));          // x4 = 20
             emit(NOP(0));
-            emit(ADD(5, 4, 4));           // distance 2: no stall: 40
-            emit(ECALL);
+            emit(ADD(5, 4, 4));           // distance 2: RegFile: 40
+            emit(EBREAK);
             runProg;
             expectReg(6, 32'd10, "lw result");
-            expectReg(7, 32'd8, "and after load-use");
+            expectReg(7, 32'd8, "and right after load");
             expectReg(8, 32'd16, "add after and");
             expectReg(5, 32'd40, "load distance 2, no stall");
-            expectCount(onStalls, 1, "exactly one load-use stall");
-            expectCount(offStalls, 1, "stall count independent of BP");
+            expectCount(onStalls, 0, "3-stage: load-use costs no stall");
+            expectCount(offStalls, 0, "stall count independent of BP");
             expectTwinsEqual;
             report("load-use");
         end
@@ -499,13 +525,13 @@ module pipeline_tb;
             $display("\n--- Test 3: store data forwarding and store/load ordering ---");
             startProg;
             emit(LW(5, 512, 0));          // x5 = 10
-            emit(SW(5, 520, 0));          // store data from a load (stall + MEM/WB)
+            emit(SW(5, 520, 0));          // store data from a load (MEM_WB)
             emit(ADDI(4, 0, 77));
-            emit(SW(4, 524, 0));          // store data from EX/MEM, imm must survive
+            emit(SW(4, 524, 0));          // store data forwarded, imm must survive
             emit(LW(6, 524, 0));          // x6 = 77
             emit(SW(4, 528, 0));
             emit(LW(7, 528, 0));          // store then load back to back
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectMem(10'h208, 32'd10, "sw of loaded value");
             expectMem(10'h20C, 32'd77, "sw of forwarded ALU value");
@@ -524,7 +550,7 @@ module pipeline_tb;
             emit(JAL(3, 8));              //  8: x3 = 12, jump to 16
             emit(ADDI(9, 0, 99));         // 12: skipped
             emit(ADD(4, 3, 3));           // 16: JAL link forwarded: 24
-            emit(ECALL);                  // 20
+            emit(EBREAK);                  // 20
             runProg;
             expectReg(1, 32'h12345000, "lui");
             expectReg(2, 32'h2468A000, "lui forwarded");
@@ -544,7 +570,7 @@ module pipeline_tb;
             emit(ADDI(5, 0, 1));          //  8: skipped
             emit(ADDI(5, 0, 2));          // 12: skipped
             emit(ADDI(6, 0, 3));          // 16
-            emit(ECALL);                  // 20
+            emit(EBREAK);                  // 20
             runProg;
             expectReg(2, 32'd8, "jalr link");
             expectReg(5, 32'd0, "jalr skipped instructions");
@@ -562,7 +588,7 @@ module pipeline_tb;
             emit(ADDI(1, 1, 3));          //  8
             emit(ADDI(2, 2, -1));         // 12
             emit(BNE(2, 0, -8));          // 16: back to 8
-            emit(ECALL);                  // 20
+            emit(EBREAK);                  // 20
             runProg;
             expectReg(1, 32'd18, "loop accumulator");
             expectReg(2, 32'd0, "loop counter");
@@ -570,7 +596,8 @@ module pipeline_tb;
             expectCount(offRetired, 21, "retired (predictor off)");
             expectCount(onMispred, 2, "BP on: first taken + exit");
             expectCount(offMispred, 5, "BP off: every taken branch");
-            check(onCycles < offCycles, "predictor reduces total cycles");
+            if (IDM) check(onCycles == offCycles, "ID mode: predictor changes no cycle count");
+            else     check(onCycles < offCycles, "EX mode: predictor reduces total cycles");
             expectTwinsEqual;
             report("bne loop");
         end
@@ -586,7 +613,7 @@ module pipeline_tb;
             emit(ADDI(1, 1, 5));          // 12
             emit(ADDI(2, 2, -1));         // 16
             emit(JAL(0, -12));            // 20: back to 8
-            emit(ECALL);                  // 24
+            emit(EBREAK);                  // 24
             runProg;
             expectReg(1, 32'd20, "jal loop accumulator");
             expectReg(2, 32'd0, "jal loop counter");
@@ -600,17 +627,17 @@ module pipeline_tb;
 
     task test8_wrong_path_halt;
         begin
-            $display("\n--- Test 8: ECALL on a mispredicted path must not halt ---");
+            $display("\n--- Test 8: EBREAK on a mispredicted path must not halt ---");
             startProg;
             emit(ADDI(1, 0, 1));          //  0
             emit(BEQ(1, 1, 12));          //  4: taken, to 16
-            emit(ECALL);                  //  8: wrong path
+            emit(EBREAK);                  //  8: wrong path
             emit(ADDI(5, 0, 111));        // 12: wrong path
             emit(ADDI(6, 0, 222));        // 16
-            emit(ECALL);                  // 20
+            emit(EBREAK);                  // 20
             runProg;
             expectReg(5, 32'd0, "wrong-path addi squashed");
-            expectReg(6, 32'd222, "correct path continued after wrong ECALL");
+            expectReg(6, 32'd222, "correct path continued after wrong EBREAK");
             expectCount(onMispred, 1, "one mispredict (cold branch)");
             expectTwinsEqual;
         end
@@ -631,7 +658,7 @@ module pipeline_tb;
             emit(SH(7, 514, 0));          // upper half -> 0xFFFE7F0A
             emit(LW(8, 512, 0));
             emit(LW(9, 532, 0));          // 0x7C8AF1B2 data word
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(1, 32'hFFFFFFFB, "lb sign extend");
             expectReg(2, 32'h000000FB, "lbu zero extend");
@@ -651,12 +678,13 @@ module pipeline_tb;
             for (i = 0; i < 40; i = i + 1) begin
                 emit(ADDI(1 + (i % 8), 0, i));
             end
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
-            // ECALL (index 40) is in ID in slot 41; halt latches at the end of it
-            expectCount(onCycles, 84, "cycles = 2 * (N + 2)");
-            expectCount(offCycles, 84, "cycles (predictor off)");
-            expectCount(onRetired, 41, "retired = N + ECALL");
+            // EBREAK (index 40) is fetched and decoded in slot 41 (Stage 0);
+            // halt latches at the end of it: 2 * (N + 1) cycles
+            expectCount(onCycles, 82, "cycles = 2 * (N + 1)");
+            expectCount(offCycles, 82, "cycles (predictor off)");
+            expectCount(onRetired, 41, "retired = N + EBREAK");
             expectCount(onStalls, 0, "no stalls");
             expectCount(onMispred, 0, "no mispredicts");
             report("straight line");
@@ -706,7 +734,7 @@ module pipeline_tb;
             end
             if (t >= 20000) begin
                 timeouts = timeouts + 1;
-                errors = errors + 1;
+                errors = errors + 1; if ($test$plusargs("stopfail")) $finish;
                 $display("[FAIL] regression timeout");
             end
             repeat (16) @(posedge clk);
@@ -748,20 +776,20 @@ module pipeline_tb;
 
     task test12_id_branch_hazards;
         begin
-            $display("\n--- Test 12: ID-stage branch hazards (Bonus 4) ---");
-            // (a) ALU result right before a branch: 1 stall, then EX/MEM forward
+            $display("\n--- Test 12: branch operand hazards (ID mode: Bonus 4 stall/forward) ---");
+            // (a) ALU result right before a branch: ID mode forwards EX_MEM, no stall
             startProg;
             emit(ADDI(1, 0, 3));          //  0
             emit(ADDI(2, 0, 3));          //  4
-            emit(BEQ(1, 2, 8));           //  8: x2 in EX -> stall, taken to 16
+            emit(BEQ(1, 2, 8));           //  8: x2 in Stage 1, taken to 16
             emit(ADDI(9, 0, 99));         // 12: skipped
             emit(ADDI(10, 0, 1));         // 16
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(9, 32'd0, "ALU-use branch taken, skip");
             expectReg(10, 32'd1, "ALU-use branch target");
-            expectCount(onStalls, 1, "ALU->branch: 1 stall");
-            // (b) one instruction gap: forwarded from EX/MEM, no stall
+            expectCount(onStalls, 0, "ALU->branch: 0 stalls");
+            // (b) one instruction gap: value already in the RegFile
             startProg;
             emit(ADDI(1, 0, 3));
             emit(ADDI(2, 0, 3));
@@ -769,55 +797,55 @@ module pipeline_tb;
             emit(BEQ(1, 2, 8));
             emit(ADDI(9, 0, 99));
             emit(ADDI(10, 0, 1));
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
-            expectReg(9, 32'd0, "EX/MEM-forwarded branch skip");
+            expectReg(9, 32'd0, "gap-1 branch skip");
             expectCount(onStalls, 0, "ALU, gap, branch: 0 stalls");
-            // (c) load right before a branch: 2 stalls
+            // (c) load right before a branch: ID mode 1 stall, EX mode 0
             startProg;
             emit(LW(1, 512, 0));          // x1 = 10
             emit(ADDI(2, 0, 10));
             emit(LW(3, 512, 0));          // x3 = 10
-            emit(BEQ(3, 2, 8));           // load in EX, then in MEM
+            emit(BEQ(3, 2, 8));           // load in Stage 1 during ID
             emit(ADDI(9, 0, 99));
             emit(ADDI(10, 0, 1));
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(9, 32'd0, "load->branch taken, skip");
-            expectCount(onStalls, 2, "load->branch: 2 stalls");
-            // (d) load, gap, branch: 1 stall
+            expectCount(onStalls, IDM ? 1 : 0, "load->branch: ID 1 stall, EX 0");
+            // (d) load, gap, branch: 0 stalls (RegFile)
             startProg;
             emit(ADDI(2, 0, 10));
             emit(LW(3, 512, 0));
             emit(NOP(0));
             emit(BNE(3, 2, 8));           // not taken
             emit(ADDI(9, 0, 7));
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(9, 32'd7, "load,gap,bne not taken");
-            expectCount(onStalls, 1, "load, gap, branch: 1 stall");
-            // (e) JALR base from ALU right before it: 1 stall
+            expectCount(onStalls, 0, "load, gap, branch: 0 stalls");
+            // (e) JALR base from ALU right before it: 0 stalls
             startProg;
             emit(ADDI(1, 0, 16));         //  0
-            emit(JALR(2, 1, 0));          //  4: stall, jump to 16
+            emit(JALR(2, 1, 0));          //  4: forwarded base, jump to 16
             emit(ADDI(5, 0, 1));          //  8
             emit(ADDI(5, 0, 2));          // 12
             emit(ADDI(6, 0, 3));          // 16
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(5, 32'd0, "jalr ALU-use skip");
             expectReg(6, 32'd3, "jalr ALU-use target");
-            expectCount(onStalls, 1, "ALU->jalr: 1 stall");
+            expectCount(onStalls, 0, "ALU->jalr: 0 stalls");
             expectTwinsEqual;
-            // (f) mispredict penalty is 1 slot (2 cycles) when resolved in ID
+            // (f) mispredict penalty: 0 in ID mode, 1 slot (2 cycles) in EX mode
             startProg;
             emit(BEQ(0, 0, 8));           //  0: cold, taken -> mispredict
-            emit(ADDI(9, 0, 99));         //  4: squashed in IF
-            emit(ECALL);                  //  8
+            emit(ADDI(9, 0, 99));         //  4: EX mode: fetched then squashed
+            emit(EBREAK);                  //  8
             runProg;
             expectReg(9, 32'd0, "squashed fall-through");
             expectCount(onMispred, 1, "one mispredict");
-            expectCount(onCycles, 8, "cycles: 2 instr + 1 squash slot + fill");
+            expectCount(onCycles, IDM ? 4 : 6, "cycles: ID 2 slots, EX 2 slots + 1 squash");
         end
     endtask
 
@@ -853,8 +881,8 @@ module pipeline_tb;
     endfunction
 
     // 6 branch kinds x 2 outcomes. Operands are produced by ADDIs placed
-    // `gap` NOPs before the branch (gap 0 = stall, 1 = EX/MEM forward,
-    // 2+ = MEM/WB forward or register file).
+    // `gap` NOPs before the branch (gap 0 = forwarded from Stage 1,
+    // 1+ = register file).
     task branchSuite(input integer gap);
         integer kind, c, j, a, b, idx;
         integer bad;
@@ -879,7 +907,7 @@ module pipeline_tb;
                     idx = idx + 1;
                 end
             end
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             bad = 0;
             idx = 0;
@@ -913,11 +941,11 @@ module pipeline_tb;
             $display("\n--- Test 13: every branch type, operand distance 0 / 1 / 2 / 3 ---");
             $display("       distance 0 (ALU result right before the branch)");
             branchSuite(0);
-            expectCount(onStalls, 12, "gap 0: one stall per branch");
-            $display("       distance 1 (EX/MEM forward)");
+            expectCount(onStalls, 0, "gap 0: forwarded, no stalls");
+            $display("       distance 1 (register file)");
             branchSuite(1);
             expectCount(onStalls, 0, "gap 1: no stalls");
-            $display("       distance 2 (MEM/WB or register file)");
+            $display("       distance 2 (register file)");
             branchSuite(2);
             expectCount(onStalls, 0, "gap 2: no stalls");
             $display("       distance 3");
@@ -928,23 +956,23 @@ module pipeline_tb;
 
     task test14_jalr_load;
         begin
-            $display("\n--- Test 14: JALR base comes from a load (2 stalls) ---");
+            $display("\n--- Test 14: JALR base comes from a load (ID mode: 1 stall) ---");
             startProg;
             wr32(10'h220, 32'd24);        // jump target stored in data memory
             emit(LW(1, 544, 0));          //  0: x1 = 24
-            emit(JALR(2, 1, 0));          //  4: load in EX then MEM -> 2 stalls
+            emit(JALR(2, 1, 0));          //  4: load in Stage 1 -> ID mode stalls once
             emit(ADDI(5, 0, 1));          //  8: skipped
             emit(ADDI(5, 0, 2));          // 12: skipped
             emit(ADDI(7, 0, 5));          // 16: skipped
             emit(NOP(0));                 // 20: skipped
             emit(ADDI(6, 0, 3));          // 24
-            emit(ECALL);                  // 28
+            emit(EBREAK);                  // 28
             runProg;
             expectReg(2, 32'd8, "jalr link");
             expectReg(5, 32'd0, "skipped instructions");
             expectReg(7, 32'd0, "skipped instruction 2");
             expectReg(6, 32'd3, "jalr target executed");
-            expectCount(onStalls, 2, "load->jalr: 2 stalls");
+            expectCount(onStalls, IDM ? 1 : 0, "load->jalr: ID 1 stall, EX 0");
             expectTwinsEqual;
         end
     endtask
@@ -960,7 +988,7 @@ module pipeline_tb;
             emit(BEQ(3, 2, 8));           // taken
             emit(ADDI(9, 0, 99));         // skipped
             emit(ADDI(10, 0, 1));
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(9, 32'd0, "taken, skipped");
             expectReg(10, 32'd1, "target executed");
@@ -974,11 +1002,11 @@ module pipeline_tb;
             $display("\n--- Test 16: EBREAK (rs2 field = 1) behind a load into x1 must not stall ---");
             startProg;
             emit(LW(1, 512, 0));          // x1 = 10, rd matches EBREAK's rs2 field
-            emit(32'h00100073);           // EBREAK
+            emit(EBREAK);
             runProg;
             expectReg(1, 32'd10, "lw before ebreak");
             expectCount(onStalls, 0, "no spurious stall for ebreak");
-            expectCount(onCycles, 6, "halts at cycle 2 * (N + 2)");
+            expectCount(onCycles, 4, "halts at cycle 2 * (N + 1)");
         end
     endtask
 
@@ -991,7 +1019,7 @@ module pipeline_tb;
             emit(JALR(2, 1, 0));          //  8: target 17 & ~1 = 16
             emit(ADDI(5, 0, 1));          // 12: skipped
             emit(ADDI(6, 0, 3));          // 16
-            emit(ECALL);                  // 20
+            emit(EBREAK);                  // 20
             runProg;
             expectReg(2, 32'd12, "jalr link");
             expectReg(5, 32'd0, "skipped");
@@ -1014,7 +1042,7 @@ module pipeline_tb;
             emit(JAL(0, 8));              // 28: to 36
             emit(ADDI(12, 0, 99));        // 32: skipped
             emit(ADDI(13, 0, 1));         // 36
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
             expectReg(9, 32'd0, "first branch skip");
             expectReg(10, 32'd0, "branch at branch target skip");
@@ -1030,21 +1058,22 @@ module pipeline_tb;
         begin
             $display("\n--- Test 18: a correctly predicted taken branch has no squash ---");
             // 12-iteration loop: BP off mispredicts all 11 taken branches; BP on
-            // mispredicts only the first taken branch and the exit (2), so it
-            // avoids 9 mispredicts x 2 cycles (1 squashed slot) = 18 cycles.
+            // mispredicts only the first taken branch and the exit (2).
+            // EX mode: avoids 9 mispredicts x 2 cycles (1 squashed slot) = 18.
+            // ID mode: a redirect costs nothing, so the cycle counts are equal.
             startProg;
             emit(ADDI(1, 0, 12));         //  0
             emit(NOP(0));                 //  4
             emit(NOP(0));                 //  8
             emit(ADDI(1, 1, -1));         // 12
             emit(NOP(0));                 // 16
-            emit(BNE(1, 0, -8));          // 20: back to 12 (x1 two ahead: forwarded)
-            emit(ECALL);                  // 24
+            emit(BNE(1, 0, -8));          // 20: back to 12 (x1 two ahead: RegFile)
+            emit(EBREAK);                  // 24
             runProg;
             expectReg(1, 32'd0, "loop counter");
             expectCount(onMispred, 2, "BP on: first taken + exit");
             expectCount(offMispred, 11, "BP off: 11 taken branches");
-            expectCount(offCycles - onCycles, (11 - 2) * 2, "saved 2 cycles per avoided mispredict");
+            expectCount(offCycles - onCycles, IDM ? 0 : (11 - 2) * 2, "EX: 2 cycles saved per avoided mispredict");
             expectTwinsEqual;
             report("predicted loop");
         end
@@ -1149,7 +1178,7 @@ module pipeline_tb;
             emit(ADDI(28, 28, 7));        // 0x58 filler
             emit(BNE(26, 25, -16));       // 0x5C IB: inner loop-back
             emit(BNE(23, 24, -28));       // 0x60 OB: outer loop-back
-            emit(ECALL);                  // 0x64
+            emit(EBREAK);                  // 0x64
             logCnt = 0;
             runProg;
 
@@ -1240,20 +1269,20 @@ module pipeline_tb;
             topAddr = progPtr;
             emit(ADDI(28, 28, 1));        // top:
 
-            // 1: ALU -> beq, distance 1, rs1.  Taken.  1 stall
+            // 1: ALU -> beq, distance 1, rs1 (EX_MEM forward in ID).  Taken.  0 stalls
             padT(3);
             emit(ADDI(1, 0, 1));
             emit(ADDI(2, 0, 5));
             emit(ADDI(1, 2, 0));
             emit(BEQ(1, 2, 8));
             emit(ADDI(30, 30, 1));
-            // 2: ALU -> bne, distance 1.  Not taken (stale would be taken).  1 stall
+            // 2: ALU -> bne, distance 1.  Not taken (stale would be taken).  0 stalls
             emit(ADDI(1, 0, 1));
             emit(ADDI(2, 0, 5));
             emit(ADDI(1, 2, 0));
             emit(BNE(1, 2, 8));
             emit(ADDI(29, 29, 1));
-            // 3: add -> beq, distance 2 (EX/MEM forward).  Taken.  0 stalls
+            // 3: add -> beq, distance 2 (RegFile).  Taken.  0 stalls
             padT(4);
             emit(ADDI(1, 0, 1));
             emit(ADDI(2, 0, 9));
@@ -1261,7 +1290,7 @@ module pipeline_tb;
             emit(ADDI(4, 4, 1));
             emit(BEQ(1, 2, 8));
             emit(ADDI(30, 30, 1));
-            // 4: ALU -> blt, distance 3 (MEM/WB forward).  Taken.  0 stalls
+            // 4: ALU -> blt, distance 3 (value already in the RegFile: written in C0).  Taken.  0 stalls
             padT(5);
             emit(ADDI(1, 0, 100));
             emit(ADDI(2, 0, 50));
@@ -1270,14 +1299,14 @@ module pipeline_tb;
             emit(ADDI(4, 4, 1));
             emit(brInst(2, 1, 2, 8));
             emit(ADDI(30, 30, 1));
-            // 5: ALU -> beq, distance 1, rs2 forwarded.  Taken.  1 stall
+            // 5: ALU -> beq, distance 1, rs2 forwarded.  Taken.  0 stalls
             padT(3);
             emit(ADDI(1, 0, 4));
             emit(ADDI(2, 0, 8));
             emit(ADDI(2, 0, 4));
             emit(BEQ(1, 2, 8));
             emit(ADDI(30, 30, 1));
-            // 6: both operands forwarded (rs1 distance 2, rs2 distance 1).  Taken.  1 stall
+            // 6: both operands forwarded (rs1 distance 2 RegFile, rs2 distance 1).  Taken.  0 stalls
             padT(4);
             emit(ADDI(1, 0, 1));
             emit(ADDI(2, 0, 2));
@@ -1285,32 +1314,32 @@ module pipeline_tb;
             emit(ADDI(2, 0, 6));
             emit(BEQ(1, 2, 8));
             emit(ADDI(30, 30, 1));
-            // 7: two writers of the same rd, branch needs the newest.  Taken.  1 stall
+            // 7: two writers of the same rd, branch needs the newest.  Taken.  0 stalls
             padT(3);
             emit(ADDI(2, 0, 7));
             emit(ADDI(1, 0, 2));
             emit(ADDI(1, 0, 7));
             emit(BEQ(1, 2, 8));
             emit(ADDI(30, 30, 1));
-            // 8: lw -> bne, distance 1.  Taken.  2 stalls
+            // 8: lw -> bne, distance 1.  Taken.  ID mode: 1 stall
             padT(2);
             emit(ADDI(1, 0, 0));
             emit(LW(1, 0, 10));
             emit(BNE(1, 0, 8));
             emit(ADDI(30, 30, 1));
-            // 9: lw -> bne, distance 1.  Not taken (value 0, stale 5 would be taken).  2 stalls
+            // 9: lw -> bne, distance 1.  Not taken (value 0, stale 5 would be taken).  ID mode: 1 stall
             emit(ADDI(1, 0, 5));
             emit(LW(1, 16, 10));
             emit(BNE(1, 0, 8));
             emit(ADDI(29, 29, 1));
-            // 10: lw -> beq, distance 2.  Taken.  1 stall
+            // 10: lw -> beq, distance 2 (RegFile).  Taken.  0 stalls
             padT(3);
             emit(ADDI(2, 0, 99));
             emit(LW(2, 4, 10));
             emit(ADDI(4, 4, 1));
             emit(BEQ(2, 3, 8));
             emit(ADDI(30, 30, 1));
-            // 11: lw -> beq, distance 3 (MEM/WB load-data forward).  Taken.  0 stalls
+            // 11: lw -> beq, distance 3 (load data already in the RegFile).  Taken.  0 stalls
             padT(4);
             emit(ADDI(2, 0, 99));
             emit(LW(2, 4, 10));
@@ -1318,13 +1347,13 @@ module pipeline_tb;
             emit(ADDI(4, 4, 1));
             emit(BEQ(2, 3, 8));
             emit(ADDI(30, 30, 1));
-            // 12: lw of a negative value -> blt, distance 1.  Taken.  2 stalls
+            // 12: lw of a negative value -> blt, distance 1.  Taken.  ID mode: 1 stall
             padT(2);
             emit(ADDI(1, 0, 1));
             emit(LW(1, 12, 10));
             emit(brInst(2, 1, 0, 8));
             emit(ADDI(30, 30, 1));
-            // 13: lw (rs1, distance 2) + addi (rs2, distance 1).  Taken.  1 stall
+            // 13: lw (rs1, distance 2) + addi (rs2, distance 1).  Taken.  0 stalls
             padT(4);
             emit(ADDI(1, 0, 3));
             emit(ADDI(2, 0, 99));
@@ -1339,7 +1368,7 @@ module pipeline_tb;
             emit(ADDI(4, 4, 1));
             emit(brInst(2, 1, 2, 8));
             emit(ADDI(29, 29, 1));
-            // 15: ALU -> jalr base, distance 1.  Must land on the target.  1 stall
+            // 15: ALU -> jalr base, distance 1.  Must land on the target.  0 stalls
             pcA = progPtr;
             emit(ADDI(5, 0, pcA + 12));   // stale base: points at the fail marker
             emit(ADDI(5, 0, pcA + 16));   // producer: real target
@@ -1348,15 +1377,15 @@ module pipeline_tb;
             // loop back (target of the jalr is the instruction after the marker)
             padT(0);
             emit(BNE(28, 27, topAddr - progPtr));
-            emit(ECALL);
+            emit(EBREAK);
             runProg;
 
             expectReg(28, 32'd3, "passes completed");
             expectReg(30, 32'd0, "FAIL marks (taken case fell through)");
             expectReg(29, 32'd9, "NOT-TAKEN passes: 3 cases x 3");
             expectReg(4, 32'd21, "independent fillers executed");
-            expectCount(onStalls, 42, "stalls: 14 per pass x 3 passes");
-            expectCount(offStalls, 42, "stalls independent of predictor");
+            expectCount(onStalls, IDM ? 9 : 0, "ID: 3 lw->branch stalls per pass x 3");
+            expectCount(offStalls, IDM ? 9 : 0, "stalls independent of predictor");
             expectCount(onMispred, 16, "BP on: 11 cold + 3 jalr + 2 loop");
             expectCount(offMispred, 38, "BP off: 33 taken + 3 jalr + 2 loop");
             check(onMispred < offMispred, "warm predictor avoids mispredicts while stalled");
@@ -1373,11 +1402,49 @@ module pipeline_tb;
             emit(ADDI(0, 0, 7));          //  4: discarded write
             emit(BEQ(0, 5, 8));           //  8: x0 (=0) == x5 (=0) -> taken, skips next
             emit(ADDI(30, 0, 1));         // 12: executes only if x0 was forwarded as 7
-            emit(ECALL);                  // 16
+            emit(EBREAK);                  // 16
             runProg;
             expectReg(30, 32'd0, "branch ignores discarded x0 write");
             expectTwinsEqual;
-            $display("       info: x0-write -> branch stall slots = %0d (0 = no spurious stall)", onStalls);
+            expectCount(onStalls, 0, "x0 write -> branch: no spurious stall");
+        end
+    endtask
+
+    // ECALL, FENCE, FENCE.TSO and PAUSE are NOPs. Only EBREAK halts.
+    task test23_nops_and_halt;
+        begin
+            $display("\n--- Test 23: ECALL / FENCE / FENCE.TSO / PAUSE are NOPs, only EBREAK halts ---");
+            startProg;
+            emit(ADDI(1, 0, 5));
+            emit(ECALL);
+            emit(ADDI(2, 1, 3));          // dependent chain straight through the NOPs
+            emit(FENCE);
+            emit(ADDI(3, 2, 3));
+            emit(FENCET);
+            emit(ADDI(4, 3, 3));
+            emit(PAUSE);
+            emit(ADD(5, 4, 1));
+            emit(ECALL);
+            emit(ECALL);
+            emit(ADDI(6, 0, 66));         // runs: both ECALLs did not halt
+            emit(FENCE);                  // keeps the producer 2 ahead of the branch
+            emit(BEQ(6, 6, 8));           // taken: skips the next FENCE
+            emit(FENCE);
+            emit(PAUSE);
+            emit(ADDI(8, 0, 88));
+            emit(EBREAK);
+            emit(ADDI(7, 0, 77));         // must not execute
+            runProg;
+            expectReg(2, 32'd8, "dependent chain through ecall");
+            expectReg(3, 32'd11, "dependent chain through fence");
+            expectReg(4, 32'd14, "dependent chain through fence.tso");
+            expectReg(5, 32'd19, "dependent chain through pause");
+            expectReg(6, 32'd66, "ran past two ecalls");
+            expectReg(8, 32'd88, "ran up to ebreak");
+            expectReg(7, 32'd0, "instruction after ebreak not executed");
+            expectCount(onStalls, 0, "NOPs cause no stalls");
+            check(dut.haltLatch === 1'b1 && dutNo.haltLatch === 1'b1, "ebreak latched the halt");
+            expectTwinsEqual;
         end
     endtask
 
@@ -1422,6 +1489,7 @@ module pipeline_tb;
         test20_predictor_state_walk;
         test21_stale_value_hazards;
         test22_x0_write_branch;
+        test23_nops_and_halt;
 
         $display("\n--- Structural checks over the whole run ---");
         expectCount(portViol, 0, "memory writes during C0 (fetch)");

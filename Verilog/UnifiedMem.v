@@ -13,13 +13,15 @@
  *
  * Change history:
  *   11/13/26 - Merged InstMem and DataMem into one byte-addressable array
+ *   11/16/26 - PROGRAM_FILE parameter ($readmemh); demo image ends with EBREAK
  ******************************************************************************/
 
 `timescale 1ns / 1ps
 `include "defines.vh"
 
 module UnifiedMem #(
-    parameter ADDR_BITS = 10
+    parameter ADDR_BITS    = 10,
+    parameter PROGRAM_FILE = ""      // byte-per-line hex image; "" = built-in demo
 )(
     input                  clk,
     input                  memRead,
@@ -57,6 +59,10 @@ module UnifiedMem #(
             mem[i] = 8'd0;
         end
 
+        if (PROGRAM_FILE != "") begin
+            // Same image for simulation and for the FPGA bitstream
+            $readmemh(PROGRAM_FILE, mem);
+        end else begin
         // --- INSTRUCTIONS (byte address = 4 * old InstMem index) ---
         // lw x1, 512(x0) -> x1 = 10
         initWord(10'h000, 32'b001000000000_00000_010_00001_0000011);
@@ -66,12 +72,15 @@ module UnifiedMem #(
         initWord(10'h008, 32'b0000000_00010_00001_000_00011_0110011);
         // sw x3, 520(x0) -> mem[0x208] = 30
         initWord(10'h00C, 32'b0010000_00011_00000_010_01000_0100011);
+        // ebreak -> halt
+        initWord(10'h010, 32'b000000000001_00000_000_00000_1110011);
 
         // --- DATA (DATA_BASE = 0x200) ---
         initWord(10'h200, 32'd10);
         initWord(10'h204, 32'd20);
         initWord(10'h208, 32'hFFFFFFFB);
         initWord(10'h214, 32'h7C8AF1B2);
+        end
     end
 
     // Little-endian read of the 4 bytes starting at addr

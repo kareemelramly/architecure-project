@@ -1,115 +1,111 @@
-femtoRV32 - Single-Cycle RISC-V Processor
+femtoRV32 - 3-Stage Pipelined RISC-V Processor (RV32I + RV32M)
+CSCE 3301 Computer Architecture, Fall 2026, Project 1, Milestone 3
 
 Students
 
 - Kareem Abdellatif
-- Mohamed Aboelfotouh (https://aucegypt.instructure.com/courses/17790/users/10714)
-- Moustafa Fayed (https://aucegypt.instructure.com/courses/17790/users/4886)
+- Mohamed Aboelfotouh
+- Moustafa Fayed
 
 Overview
 
-A 32-bit single-cycle educational processor in Verilog. The current testbench covers 40 RV32I instructions and eight RV32M instructions, plus FENCE.TSO and PAUSE. ECALL and EBREAK halt the PC. Synchronization instructions execute as side-effect-free NOPs in this memory model. This is the project's implemented behavior, not a privileged execution environment.
+A 32-bit RV32I + RV32M processor in Verilog. One single-ported, byte-addressable
+memory holds instructions and data. Every pipeline stage takes one slot of two
+cycles: C0 is the fetch cycle, C1 is the data cycle. One instruction issues every
+2 cycles (CPI = 2).
 
-Files
+    Stage 0: IF (C0) + ID (C1)
+    Stage 1: EX (C0) + MEM (C1)
+    Stage 2: WB (C0)
 
-- Verilog/: RTL, shared constants, instruction ROM and self-checking testbench.
-- Testing/: fresh simulation results, optional waveform-capture module and VCD traces.
-- Testing/waveforms/: original GTKWave screenshot saved by the team.
-- Design/: block diagrams, generated Yosys schematic and report generation scripts.
-- Journal/: individual contribution logs.
-- output/pdf/femtoRV32_Design_Report.pdf: design report with diagrams, schematic and waveform evidence.
+Data hazards need no stalls. The instruction directly ahead is forwarded from
+MEM_WB to EX, and it can be an ALU result or load data. Older instructions are
+already in the register file, which is written at the end of C0 and read in C1.
 
-Implemented instructions
+The parameter BRANCH_IN_ID selects where branches and jumps resolve:
+- BRANCH_IN_ID = 1 (default, Bonus 4): branches and jumps resolve in ID, with no
+  branch penalty. A load directly before a branch or JALR costs 1 stall slot.
+- BRANCH_IN_ID = 0: branches and jumps resolve in EX, and a wrong next PC costs
+  1 slot. The BTB + 2-bit BHT predictor (Bonus 3, BP_ENABLE = 1) removes the
+  penalty on learned branches.
 
-| Group | Instructions |
-| --- | --- |
-| Upper immediate / jumps (4) | LUI, AUIPC, JAL, JALR |
-| Branches (6) | BEQ, BNE, BLT, BGE, BLTU, BGEU |
-| Loads (5) | LB, LH, LW, LBU, LHU |
-| Stores (3) | SB, SH, SW |
-| Immediate ALU (9) | ADDI, SLTI, SLTIU, XORI, ORI, ANDI, SLLI, SRLI, SRAI |
-| Register ALU (10) | ADD, SUB, SLL, SLT, SLTU, XOR, SRL, SRA, OR, AND |
-| Base system / synchronization (3) | FENCE, ECALL, EBREAK |
-| RV32M (8) | MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM, REMU |
-| Additional synchronization / hint (2) | FENCE.TSO, PAUSE |
+Bonuses claimed
 
-The 40-instruction base count includes FENCE, ECALL and EBREAK. FENCE.TSO and PAUSE are additional checks. Directed instruction coverage is not an exhaustive ISA-compliance proof.
+- Bonus 3: 2-bit saturating-counter branch predictor with a 16-entry BTB.
+- Bonus 4: branch and jump resolution in ID, with ID-stage forwarding and stall.
+- RV32M (Bonus 2) is also implemented and tested, but it is not claimed.
 
-Build and run in WSL
+Folders
 
-Required: Icarus Verilog (iverilog, vvp), Yosys and Graphviz (dot). Verified using Icarus Verilog 12.0 and Yosys 0.52.
+- Verilog/: RTL, testbenches, constraints (const1.xdc) and the board top
+  (datapath_board_pipelined.v).
+- Testing/: test results, the assembly programs in Testing/programs, the
+  waveforms in Testing/waveforms, and the mutation test.
+- Design/: pipelined block diagram (Pipelined_3Stage_Block_Diagram.svg/png/pdf),
+  the MS2 single-cycle diagrams, and the report and waveform scripts.
+- Journal/: individual logs.
+- report/femtoRV32_MS3_Report.pdf: MS3 report.
 
-cd "/mnt/d/New folder/architecure-project/Verilog"
-iverilog -g2012 -Wall -s datapath_tb -o ../Testing/simulation.out *.v
-vvp ../Testing/simulation.out | tee ../Testing/testbench_result.txt
+Run the simulations (WSL or Linux, Icarus Verilog 12)
 
-Compile all sources together. Compiling only the datapath and testbench produces unknown-module errors. Run from Verilog/ so defines.vh is found.
+cd Verilog
+SRC=$(ls *.v | grep -v -e _tb -e datapath_board)
+iverilog -g2012 -Wall -Ppipeline_tb.BRANCH_IN_ID=1 -s pipeline_tb -o /tmp/p.out pipeline_tb.v $SRC && vvp /tmp/p.out | tail -3
+iverilog -g2012 -Wall -Ppipeline_tb.BRANCH_IN_ID=0 -s pipeline_tb -o /tmp/p.out pipeline_tb.v $SRC && vvp /tmp/p.out | tail -3
+iverilog -g2012 -Wall -s unit_tb -o /tmp/u.out unit_tb.v $SRC && vvp /tmp/u.out
+iverilog -g2012 -Wall -s datapath_tb -o /tmp/d.out datapath_tb.v $SRC && vvp /tmp/d.out | tail -3
+sh ../Testing/programs/run_all.sh      # assembles with llvm-mc / ld.lld / llvm-objcopy
 
-Capture waveforms
+The .hex files are committed, so programs_tb runs without the assembler:
+iverilog -g2012 -s programs_tb -Pprograms_tb.PROG=\"../Testing/programs/hazards.hex\" -o /tmp/g.out programs_tb.v $SRC && vvp /tmp/g.out
 
-iverilog -g2012 -Wall -s datapath_tb -s waveform_capture \
-  -o ../Testing/waveform_sim.out *.v ../Testing/waveform_capture.v
-vvp ../Testing/waveform_sim.out | tee ../Testing/documentation_test_results.txt
-Optional, if GTKWave is installed:
-gtkwave ../Testing/datapath.vcd
+Build for the FPGA (Nexys A7-100T, Vivado)
 
-The separate waveform_capture.v module observes signals without changing the RTL or testbench. The report uses the existing GTKWave screenshot in Testing/waveforms/waveform.png, together with the original block diagram and datapath schematic from Design/.
+Add every Verilog/*.v file except the *_tb.v files, datapath.v,
+datapath_board.v, InstMem.v and DataMem.v (those are the MS2 single-cycle design). Add const1.xdc and set datapath_board_pipelined as the top module.
+Set the generic PROGRAM_FILE to the absolute path of a Testing/programs/*.hex file
+(BRANCH_IN_ID and BP_ENABLE are also generics).
 
-Generate the schematic
+Board controls
+- BTNC: step one CPU clock cycle.
+- SW15: reset.
+- SW6: free run. SW7: fast free run.
+- SW0-1: LED view.
+- SW2-5: display view (0 PC, 1 next PC, 2 instruction in ID, 3 ALU result,
+  4 memory address, 5 memory data, 6 write-back value, 7 store data,
+  15 register x[SW8-12]).
+- LD15 and the decimal points light when EBREAK halts the CPU.
 
-yosys -p '
-read_verilog datapath.v DataMem.v InstMem.v RegFile.v Nbit_decoder.v N_bit_register.v DFlipFlop.v mux2x1.v ImmGen.v control_unit.v alu_unit.v ALU.v BranchUnit.v
-hierarchy -check -top datapath
-proc
-show -format dot -prefix ../Design/report_datapath_schematic datapath
-'
-dot -Tpdf ../Design/report_datapath_schematic.dot -o ../Design/report_datapath_schematic.pdf
-dot -Tpng -Gdpi=130 ../Design/report_datapath_schematic.dot -o ../Design/report_datapath_schematic.png
+Program pass signature: x31 = 00000000 and x30 = 0000C0DE.
 
-This generates a hierarchical RTL schematic, not a placed-and-routed FPGA netlist or a timing report. The top exposes only clock/reset. Avoid aggressive cleanup solely for illustration: an output-less top can be optimized away.
+Release notes - 16 November 2026
 
-Release notes - 2 November 2026
-
-What works
-
-- Fresh simulation: 110 cycles to ECALL, 269 passing checks and zero failed checks; all 48 coverage bits set.
-- Branch score 70, trap count 0; six branch conditions, an unsigned not-taken branch, jump links and skipped traps checked.
-- Signed/unsigned byte and halfword loads; all four byte-store lanes; both halfword-store positions; word readback.
-- Register x0 hardwired to zero; transient register results captured before later writes.
-- All eight RV32M operations, including divide-by-zero and signed-overflow cases.
-- FENCE/FENCE.TSO/PAUSE decode with no register, memory or branch side effects. ECALL halts at byte PC 468; EBREAK is checked in a separate reset phase.
-- Yosys hierarchy elaboration and datapath schematic generation complete successfully.
+What works (simulation)
+- pipeline_tb: 160 / 160 checks with BRANCH_IN_ID = 1 and 160 / 160 with
+  BRANCH_IN_ID = 0. The predictor-on and predictor-off pipelines end with
+  identical state, and both match the single-cycle reference on the MS2 program.
+- Assembly programs: all_instr, hazards, predictor and nops_halt pass in 3
+  configurations (ID; EX + predictor; EX, no predictor).
+- Mutation test: 17 of 18 injected bugs are detected. The surviving mutant is
+  equivalent.
+- Unit tests and the single-cycle testbench (40 RV32I + 8 RV32M) pass.
+- EBREAK halts the CPU. ECALL, FENCE, FENCE.TSO and PAUSE run as NOPs.
 
 Issues encountered and solutions
+- ECALL halted the CPU from MS2 on. Now only EBREAK halts, and all tests end
+  with EBREAK.
+- The first MS3 pipeline had 5 stages. It was converted to the 3-stage
+  organization, and every cycle and stall expectation was re-baselined.
+- The board top was a copy of the pipeline and used a missing display driver.
+  It now instantiates the pipeline and adds an 8-digit hex display, a debounced
+  step button and a glitch-free CPU clock.
 
-- Duplicate cu_memToReg: keep one two-bit declaration and explicitly declare two-bit cu_aluOp.
-- Writeback-width drift: compare the complete ten-bit no-side-effect control vector.
-- Unknown module errors: compile all RTL dependencies, including RegFile.v, DFlipFlop.v and mux2x1.v.
-- Missing SUB/AND/OR/JAL checks: add directed instructions and cycle-by-cycle result/next-PC checks.
-- Overwritten registers: capture transient LB/SLT/SLTU/SLTI results at the relevant instruction boundary.
-- x0 writes: current register file generates writable storage only for x1-x31; x0 is constant zero.
-- RV32M corner cases: explicit division-by-zero and signed-overflow handling supplies deterministic expected results.
-
-Assumptions and limitations / what does not work
-
-- Little-endian memory; 64 data words (256 bytes), 128 instruction words (512 bytes). High address bits are discarded, so higher addresses alias.
-- Aligned halfword/word accesses and aligned 32-bit instructions assumed. Misalignment traps and cross-word accesses are not implemented.
-- Combinational memory reads; rising-edge register/memory writes. PC/register reset is asynchronous. Data memory is initialized once and is not cleared by CPU reset.
-- FENCE/FENCE.TSO/PAUSE do not implement caches, multi-hart ordering or low-power waiting; they are NOPs in this model.
-- ECALL/EBREAK halt instead of entering a trap handler. CSRs, interrupts, privilege modes, virtual memory and OS support are absent.
-- Unsupported encodings do not cause an illegal-instruction trap. Decoding uses inst[6:2] and does not fully validate all encodings.
-- No compressed, atomic or floating-point extensions, pipeline or stall interface.
-- RV32M division is combinational. FPGA clock rate, resource use, board execution and place-and-route timing are not validated. datapath_board.v is commented out.
-- Passing directed tests does not prove exhaustive correctness or timing closure.
-
-Verification evidence
-
-See Testing/documentation_test_results.txt, Testing/datapath.vcd, Testing/documentation_yosys.log and the PDF report. The final EBREAK phase resets the CPU after main-program checks. The saved GTKWave screenshot retains its original bus-display formats and time labels.
-
-Kareem Abdellatif's assigned contribution
-
-- Remaining loads: LB, LH, LBU, LHU.
-- Remaining stores: SB, SH.
-- System and synchronization: FENCE, FENCE.TSO, PAUSE, ECALL, EBREAK.
-
-See Journal/Kareem_Abdellatif_Log.txt. The existing team journals are preserved.
+Known limitations / what is not done
+- The bitstream has not been built and the board demonstration has not been
+  done. The pins in const1.xdc must be checked against Digilent's master XDC.
+- The memory is 1 KB: code below 0x300, data at 0x300. Raise ADDR_BITS in
+  UnifiedMem for larger programs.
+- There are no traps for misaligned or illegal instructions, and RV32M division
+  is combinational.
+- Bonus 3 and Bonus 4 cannot both pay off at once in 3 stages: with resolution
+  in ID the predictor has nothing to hide. Both are shown through BRANCH_IN_ID.

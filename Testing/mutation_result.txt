@@ -1,0 +1,18 @@
+EX forward rs1 off             DETECTED by ID+EX
+EX forward rs2 off             DETECTED by ID+EX
+ID forward rs1 off             DETECTED by ID
+ID forward rs2 off             DETECTED by ID
+ID forward loads too           SURVIVED
+no load->branch stall          DETECTED by ID
+no squash flush                DETECTED by EX
+wrong-path halt sticks         DETECTED by EX
+ID jalr bit0 kept              DETECTED by ID
+EX jalr bit0 kept              DETECTED by EX
+RegFile writes end of C1       DETECTED by ID+EX
+EX_MEM loads end of C1         DETECTED by ID+EX
+PC ignores stall               DETECTED by ID
+EX BP update wrong PC          DETECTED by EX
+EX redirect vs PC+4            DETECTED by EX
+ID redirect vs PC+4            DETECTED by ID
+store data unforwarded         DETECTED by ID+EX
+MEM_WB load data from result   DETECTED by ID+EX

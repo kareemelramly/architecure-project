@@ -10,6 +10,7 @@
  *   10/29/26 - Added U-type and Jump control signals (LUI, AUIPC, JAL, JALR)
  *   10/30/26 - Merged I-type control decoding
  *   11/01/26 - Changed ALUSel to 5 bits to handle RV32M
+ *   11/16/26 - Halt decoded for EBREAK only; ECALL is now a NOP (spec)
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -103,10 +104,12 @@ module control_unit(
             end
 
             `OPC_SYSTEM: begin
+                // EBREAK halts; ECALL (imm = 0) and every other SYSTEM
+                // encoding execute as a NOP
                 if ((inst[14:12] == 3'b000) &&
                     (inst[11:7]  == 5'b00000) &&
                     (inst[19:15] == 5'b00000) &&
-                    (inst[31:21] == 11'b0)) begin
+                    (inst[31:20] == 12'h001)) begin
                     halt = 1'b1;
                 end
             end

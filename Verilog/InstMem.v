@@ -301,10 +301,12 @@ module InstMem(
         // addi x21, x0, 0 -> x21 = 0
         mem[116] = 32'b000000000000_00000_000_10101_0010011;
 
-        // ecall (byte address 468) -> triggers halt
+        // ecall (byte address 468) -> executes as a NOP
         mem[117] = 32'b000000000000_00000_000_00000_1110011;
+        // ebreak (byte address 472) -> triggers halt
+        mem[118] = 32'b000000000001_00000_000_00000_1110011;
         // add x18, x1, x1 -> must NOT execute
-        mem[118] = 32'b0000000_00001_00001_000_10010_0110011;
+        mem[119] = 32'b0000000_00001_00001_000_10010_0110011;
     end
 
     assign data_out = mem[addr];

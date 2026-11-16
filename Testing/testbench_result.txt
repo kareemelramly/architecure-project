@@ -321,9 +321,11 @@ Time | PC (Byte) | WordIdx | Instruction | Funct3 | MemRd | MemWr | Halt | AluOu
 2200000 |    464    |   116    |  00000a93  |  000   |   0   |   0   |  0   |    0
   [ OK ] addi x21 (restore) next PC : 0x000001d4 (468)
   [ OK ] addi x21 (restore) result : 0x00000000 (0)
-  [ OK ] ECALL halt before timeout : 0x00000001 (1)
+2220000 |    468    |   117    |  00000073  |  000   |   0   |   0   |  0   |    0
+  [ OK ] EBREAK halt before timeout : 0x00000001 (1)
+  [ OK ] Unexpected instruction : 0x000001d8 (472)
 =====================================================================================
-Cycles until halt : 110
+Cycles until halt : 111
 --- Branch tests ---
   [ OK ] Pass Score (DataMem[3], Expected 70) : 0x00000046 (70)
   [ OK ] Trap Count (DataMem[4], Expected 0) : 0x00000000 (0)
@@ -375,15 +377,15 @@ Cycles until halt : 110
   [ OK ] or x20 (15 | 7) : 0x0000000f (15)
   [ OK ] jal x1 link register : 0x00000124 (292)
   [ OK ] jal x0 keeps x0 zero : 0x00000000 (0)
---- ECALL / Execution Bounds ---
-  [ OK ] PC frozen on ECALL (byte 468) : 0x000001d4 (468)
-  [ OK ] add after ECALL not executed (x18 = 8) : 0x00000008 (8)
+--- ECALL (NOP) / EBREAK (halt) / Execution Bounds ---
+  [ OK ] PC frozen on EBREAK (byte 472) : 0x000001d8 (472)
+  [ OK ] add after EBREAK not executed (x18 = 8) : 0x00000008 (8)
   [ OK ] x0 still zero : 0x00000000 (0)
 --- Control unit decode ---
   [ OK ] FENCE decode : no side effects, halt=0
   [ OK ] FENCE.TSO decode : no side effects, halt=0
   [ OK ] PAUSE decode : no side effects, halt=0
-  [ OK ] ECALL decode : no side effects, halt=1
+  [ OK ] ECALL decode : no side effects, halt=0
   [ OK ] EBREAK decode : no side effects, halt=1
   [ OK ] CSRRW (not ECALL/EBREAK) decode : no side effects, halt=0
   [ OK ] EBREAK halt : 0x00000001 (1)
@@ -395,4 +397,4 @@ Cycles until halt : 110
 =====================================================================================
 >>> SIMULATION PASSED: All 40 RV32I + 8 RV32M instructions checked! <<<
 =====================================================================================
-datapath_tb.v:245: $finish called at 2431000 (1ps)
+datapath_tb.v:250: $finish called at 2451000 (1ps)
