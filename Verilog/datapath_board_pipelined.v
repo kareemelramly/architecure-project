@@ -2,7 +2,7 @@
  * Module: datapath_board_pipelined.v
  * Project: femtoRV32
  * Author: Mostafa Fayed, Kareem Elramly
- * Description: FPGA wrapper (Nexys A7-100T) for the 3-stage pipelined femtoRV32.
+ * Description: FPGA wrapper (Nexys A7-100T) for the 5-stage pipelined femtoRV32.
  *              BTNC steps one CPU clock cycle (runMode = 0) or SW-selected free run.
  *              8-digit display shows a 32-bit view chosen by ssdSel:
  *              0 PC, 1 next PC, 2 instruction in ID, 3 ALU result, 4 memory address,
@@ -19,7 +19,6 @@
 `default_nettype none
 
 module datapath_board_pipelined #(parameter BP_ENABLE    = 1,
-                                  parameter BRANCH_IN_ID = 1,
                                   parameter PROGRAM_FILE = "")(
     input  wire        sysClk,
     input  wire        stepBtn,
@@ -44,8 +43,7 @@ module datapath_board_pipelined #(parameter BP_ENABLE    = 1,
     wire [15:0] dbgCtrlFlags, dbgPipeFlags;
     wire        dbgHalt;
 
-    pipeline #(.BP_ENABLE(BP_ENABLE), .BRANCH_IN_ID(BRANCH_IN_ID),
-               .PROGRAM_FILE(PROGRAM_FILE)) cpu(
+    pipeline #(.BP_ENABLE(BP_ENABLE), .PROGRAM_FILE(PROGRAM_FILE)) cpu(
         .clk(cpuClk), .reset(reset), .dbgRegSel(regSel),
         .dbgRegData(dbgRegData), .dbgPC(dbgPC), .dbgNextPC(dbgNextPC),
         .dbgInst(dbgInst), .dbgAluResult(dbgAluResult),

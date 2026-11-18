@@ -18,6 +18,6 @@ Prepared the README files, release notes and design report. Recorded a fresh pas
 November 13, 2026: MS3 pipeline infrastructure.
 Combined InstMem and DataMem into UnifiedMem.v, a single-ported, byte-addressable memory. Wrote PhaseController.v (C0 = fetch, C1 = data access), PipelineReg.v and BranchPredictor.v (16-entry BTB with 2-bit counters, Bonus 3). Built the first pipelined top level and a self-checking testbench that compares it with the single-cycle datapath.
 
-November 16, 2026: MS3 spec fixes and the 3-stage conversion.
-Fixed the decode so that only EBREAK halts; ECALL, FENCE, FENCE.TSO and PAUSE are NOPs. Added debug ports and a debug register-read port for the board, and a PROGRAM_FILE parameter so the memory can load a hex program. Converted the pipeline from 5 stages to the 3-stage organization of the description: IF_ID removed, EX_MEM made the EX-to-MEM latch, single MEM_WB forwarding source, and a BRANCH_IN_ID parameter. Re-baselined the testbench, added the assembly test programs, the mutation test, the pipelined block diagram, the waveforms and the MS3 report.
+November 16, 2026: MS3 spec fixes and the final 5-stage design.
+Fixed the decode so that only EBREAK halts; ECALL, FENCE, FENCE.TSO and PAUSE are NOPs. Added debug ports and a debug register-read port for the board, and a PROGRAM_FILE parameter so the memory can load a hex program. Kept the 5-stage pipeline (IF, ID, EX, MEM, WB) required by the doctor; the single memory port makes every stage a 2-cycle slot (C0 fetch, C1 data), so the pipeline stalls every second cycle. A 3-stage variant was tried and archived outside the submission. Added the assembly test programs, the mutation test, the 5-stage block diagram, the waveforms and the MS3 report.
 

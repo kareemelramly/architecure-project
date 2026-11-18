@@ -1,0 +1,235 @@
+
+--- Test 1: EX/MEM and MEM/WB forwarding, regfile distance 3, x0 guard ---
+[PASS] add fwd both operands: x3 = 0x0000000c
+[PASS] add fwd from EX/MEM: x5 = 0x00000013
+[PASS] add fwd EX/MEM + MEM/WB: x6 = 0x0000001f
+[PASS] distance-3 regfile path: x9 = 0x00000006
+[PASS] chained addi forward: x11 = 0x00000003
+[PASS] EX/MEM priority over MEM/WB: x10 = 0x00000006
+[PASS] x0 never forwarded: x12 = 0x00000005
+[PASS] no stalls without loads = 0
+[PASS] predictor on/off end with identical regs
+       forwarding: BP on : cycles=34 retired=16 CPI=2.125000 mispredicts=0 stalls=0
+       forwarding: BP off: cycles=34 retired=16 CPI=2.125000 mispredicts=0 stalls=0
+
+--- Test 2: load-use hazard (one bubble) ---
+[PASS] lw result: x6 = 0x0000000a
+[PASS] and after load-use: x7 = 0x00000008
+[PASS] add after and: x8 = 0x00000010
+[PASS] load distance 2, no stall: x5 = 0x00000028
+[PASS] exactly one load-use stall = 1
+[PASS] stall count independent of BP = 1
+[PASS] predictor on/off end with identical regs
+       load-use: BP on : cycles=20 retired=8 CPI=2.500000 mispredicts=0 stalls=1
+       load-use: BP off: cycles=20 retired=8 CPI=2.500000 mispredicts=0 stalls=1
+
+--- Test 3: store data forwarding and store/load ordering ---
+[PASS] sw of loaded value: mem[0x00000208] = 0x0000000a
+[PASS] sw of forwarded ALU value: mem[0x0000020c] = 0x0000004d
+[PASS] lw after sw: x6 = 0x0000004d
+[PASS] sw then lw adjacent: x7 = 0x0000004d
+[PASS] predictor on/off end with identical regs
+
+--- Test 4: LUI / JAL results forwarded (exResult) ---
+[PASS] lui: x1 = 0x12345000
+[PASS] lui forwarded: x2 = 0x2468a000
+[PASS] jal link: x3 = 0x0000000c
+[PASS] jal link forwarded: x4 = 0x00000018
+[PASS] jal skipped instruction: x9 = 0x00000000
+[PASS] predictor on/off end with identical regs
+
+--- Test 5: JALR with forwarded base ---
+[PASS] jalr link: x2 = 0x00000008
+[PASS] jalr skipped instructions: x5 = 0x00000000
+[PASS] jalr target executed: x6 = 0x00000003
+[PASS] predictor on/off end with identical regs
+
+--- Test 6: bne loop (taken 5 times), predictor learns ---
+[PASS] loop accumulator: x1 = 0x00000012
+[PASS] loop counter: x2 = 0x00000000
+[PASS] retired (predictor on) = 21
+[PASS] retired (predictor off) = 21
+[PASS] BP on: first taken + exit = 2
+[PASS] BP off: every taken branch = 5
+[PASS] predictor reduces total cycles
+[PASS] predictor on/off end with identical regs
+       bne loop: BP on : cycles=60 retired=21 CPI=2.857143 mispredicts=2 stalls=6
+       bne loop: BP off: cycles=66 retired=21 CPI=3.142857 mispredicts=5 stalls=6
+
+--- Test 7: jal-back loop with beq exit ---
+[PASS] jal loop accumulator: x1 = 0x00000014
+[PASS] jal loop counter: x2 = 0x00000000
+[PASS] retired (predictor on) = 20
+[PASS] BP on: first jal + final beq = 2
+[PASS] BP off: 4 jal + final beq = 5
+[PASS] predictor on/off end with identical regs
+       jal loop: BP on : cycles=48 retired=20 CPI=2.400000 mispredicts=2 stalls=1
+       jal loop: BP off: cycles=54 retired=20 CPI=2.700000 mispredicts=5 stalls=1
+
+--- Test 8: EBREAK on a mispredicted path must not halt ---
+[PASS] wrong-path addi squashed: x5 = 0x00000000
+[PASS] orrect path continued after wrong EBREAK: x6 = 0x000000de
+[PASS] one mispredict (cold branch) = 1
+[PASS] predictor on/off end with identical regs
+
+--- Test 9: sub-word loads and stores through the unified memory ---
+[PASS] lb sign extend: x1 = 0xfffffffb
+[PASS] lbu zero extend: x2 = 0x000000fb
+[PASS] lh sign extend: x3 = 0xffffffff
+[PASS] lhu zero extend: x4 = 0x0000ffff
+[PASS] sb then lw: x6 = 0x00007f0a
+[PASS] sh then lw: x8 = 0xfffe7f0a
+[PASS] data word: x9 = 0x7c8af1b2
+[PASS] predictor on/off end with identical regs
+
+--- Test 10: straight-line code issues one instruction every 2 cycles ---
+[PASS] cycles = 2 * (N + 2) = 84
+[PASS] cycles (predictor off) = 84
+[PASS] retired = N + EBREAK = 41
+[PASS] no stalls = 0
+[PASS] no mispredicts = 0
+       straight line: BP on : cycles=84 retired=41 CPI=2.048780 mispredicts=0 stalls=0
+       straight line: BP off: cycles=84 retired=41 CPI=2.048780 mispredicts=0 stalls=0
+
+--- Test 11: full program regression vs single-cycle datapath ---
+[PASS] BP on : all 31 registers match single-cycle
+[PASS] BP off: all 31 registers match single-cycle
+[PASS] data memory matches single-cycle (64 words)
+       full program: BP on : cycles=240 retired=112 CPI=2.142857 mispredicts=7 stalls=0
+       full program: BP off: cycles=240 retired=112 CPI=2.142857 mispredicts=7 stalls=0
+
+--- Test 12: ID-stage branch hazards (Bonus 4) ---
+[PASS] ALU-use branch taken, skip: x9 = 0x00000000
+[PASS] ALU-use branch target: x10 = 0x00000001
+[PASS] ALU->branch: 1 stall = 1
+[PASS] EX/MEM-forwarded branch skip: x9 = 0x00000000
+[PASS] ALU, gap, branch: 0 stalls = 0
+[PASS] load->branch taken, skip: x9 = 0x00000000
+[PASS] load->branch: 2 stalls = 2
+[PASS] load,gap,bne not taken: x9 = 0x00000007
+[PASS] load, gap, branch: 1 stall = 1
+[PASS] jalr ALU-use skip: x5 = 0x00000000
+[PASS] jalr ALU-use target: x6 = 0x00000003
+[PASS] ALU->jalr: 1 stall = 1
+[PASS] predictor on/off end with identical regs
+[PASS] squashed fall-through: x9 = 0x00000000
+[PASS] one mispredict = 1
+[PASS] cycles: 2 instr + 1 squash slot + fill = 8
+
+--- Test 13: every branch type, operand distance 0 / 1 / 2 / 3 ---
+       distance 0 (ALU result right before the branch)
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 0: one stall per branch = 12
+       distance 1 (EX/MEM forward)
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 1: no stalls = 0
+       distance 2 (MEM/WB or register file)
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 2: no stalls = 0
+       distance 3
+[PASS] all 6 branch kinds x taken/not-taken correct
+[PASS] predictor on/off end with identical regs
+[PASS] gap 3: no stalls = 0
+
+--- Test 14: JALR base comes from a load (2 stalls) ---
+[PASS] jalr link: x2 = 0x00000008
+[PASS] skipped instructions: x5 = 0x00000000
+[PASS] skipped instruction 2: x7 = 0x00000000
+[PASS] jalr target executed: x6 = 0x00000003
+[PASS] load->jalr: 2 stalls = 2
+[PASS] predictor on/off end with identical regs
+
+--- Test 15: load two ahead of a branch needs no stall ---
+[PASS] taken, skipped: x9 = 0x00000000
+[PASS] target executed: x10 = 0x00000001
+[PASS] load, 2 gap, branch: 0 stalls = 0
+[PASS] predictor on/off end with identical regs
+
+--- Test 16: EBREAK (rs2 field = 1) behind a load into x1 must not stall ---
+[PASS] lw before ebreak: x1 = 0x0000000a
+[PASS] no spurious stall for ebreak = 0
+[PASS] halts at cycle 2 * (N + 2) = 6
+
+--- Test 17: branch whose target is another branch ---
+[PASS] first branch skip: x9 = 0x00000000
+[PASS] branch at branch target skip: x10 = 0x00000000
+[PASS] reached: x11 = 0x00000001
+[PASS] jal skip: x12 = 0x00000000
+[PASS] reached after jal: x13 = 0x00000001
+[PASS] three cold control transfers = 3
+[PASS] predictor on/off end with identical regs
+
+--- Test 18: a correctly predicted taken branch has no squash ---
+[PASS] loop counter: x1 = 0x00000000
+[PASS] BP on: first taken + exit = 2
+[PASS] BP off: 11 taken branches = 11
+[PASS] saved 2 cycles per avoided mispredict = 18
+[PASS] predictor on/off end with identical regs
+       predicted loop: BP on : cycles=86 retired=40 CPI=2.150000 mispredicts=2 stalls=0
+       predicted loop: BP off: cycles=104 retired=40 CPI=2.600000 mispredicts=11 stalls=0
+
+--- Test 19: JALR clears bit 0 of the target ---
+[PASS] jalr link: x2 = 0x0000000c
+[PASS] skipped: x5 = 0x00000000
+[PASS] landed on 16, not 17: x6 = 0x00000003
+[PASS] predictor on/off end with identical regs
+
+--- Test 20: 2-bit predictor state walk (SNT -> WNT -> WT -> ST), nested loops ---
+[PASS] B not-taken count: x20 = 0x00000005
+[PASS] iterations: x21 = 0x0000000d
+[PASS] inner iterations (4 x 4): x22 = 0x00000010
+[PASS] outer iterations: x23 = 0x00000004
+[PASS] inner filler x27: x27 = 0x00000030
+[PASS] inner filler x28: x28 = 0x00000070
+[PASS] no hazard stalls (pure predictor) = 0
+[PASS] BP on: B 6 + J 2 + IB 5 + OB 2 = 15
+[PASS] BP off: 8 + 12 + 12 + 3 taken = 35
+[PASS] branch B: state walk and mispredicts match
+[PASS] B reached 00 (SNT) and returned to 11 (ST)
+[PASS] inner branch: 10,11,11,10 then 11,11,11,10
+[PASS] predictor on/off end with identical regs
+       predictor walk: BP on : cycles=428 retired=198 CPI=2.161616 mispredicts=15 stalls=0
+       predictor walk: BP off: cycles=468 retired=198 CPI=2.363636 mispredicts=35 stalls=0
+
+--- Test 21: add/lw directly before a branch, stale values, cold + warm predictor ---
+[PASS] passes completed: x28 = 0x00000003
+[PASS] FAIL marks (taken case fell through): x30 = 0x00000000
+[PASS] NOT-TAKEN passes: 3 cases x 3: x29 = 0x00000009
+[PASS] independent fillers executed: x4 = 0x00000015
+[PASS] stalls: 14 per pass x 3 passes = 42
+[PASS] stalls independent of predictor = 42
+[PASS] BP on: 11 cold + 3 jalr + 2 loop = 16
+[PASS] BP off: 33 taken + 3 jalr + 2 loop = 38
+[PASS] warm predictor avoids mispredicts while stalled
+[PASS] predictor on/off end with identical regs
+       stale-value hazards: BP on : cycles=600 retired=241 CPI=2.489627 mispredicts=16 stalls=42
+       stale-value hazards: BP off: cycles=644 retired=241 CPI=2.672199 mispredicts=38 stalls=42
+
+--- Test 22: a discarded write to x0 must not feed a branch ---
+[PASS] branch ignores discarded x0 write: x30 = 0x00000000
+[PASS] predictor on/off end with identical regs
+[PASS] x0 write -> branch: no spurious stall = 0
+
+--- Test 23: ECALL / FENCE / FENCE.TSO / PAUSE are NOPs, only EBREAK halts ---
+[PASS] dependent chain through ecall: x2 = 0x00000008
+[PASS] dependent chain through fence: x3 = 0x0000000b
+[PASS] dependent chain through fence.tso: x4 = 0x0000000e
+[PASS] dependent chain through pause: x5 = 0x00000013
+[PASS] ran past two ecalls: x6 = 0x00000042
+[PASS] ran up to ebreak: x8 = 0x00000058
+[PASS] instruction after ebreak not executed: x7 = 0x00000000
+[PASS] NOPs cause no stalls = 0
+[PASS] ebreak latched the halt
+[PASS] predictor on/off end with identical regs
+
+--- Structural checks over the whole run ---
+[PASS] memory writes during C0 (fetch) = 0
+[PASS] PC changes outside end of C1 = 0
+
+=================================================
+ALL 160 CHECKS PASSED
+=================================================
+pipeline_tb.v:1492: $finish called at 32080000 (1ps)

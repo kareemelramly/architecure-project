@@ -28,129 +28,118 @@ img { width: 100%; }
 ul { margin: 4px 0 8px 18px; padding: 0; }
 </style></head><body>
 
-<div class="banner">
-  <div class="kicker">CSCE 3301 Computer Architecture, Fall 2026, Project 1, Milestone 3</div>
-  <h1>femtoRV32: 3-stage pipelined RV32IM processor</h1>
-  <p>Kareem Abdellatif, Mohamed Aboelfotouh, Moustafa Fayed. 16 November 2026.</p>
-</div>
+<div class="banner"><div class="kicker">CSCE 3301 Computer Architecture, Fall 2026, Project 1, Milestone 3</div>
+<h1>femtoRV32: 5-stage pipelined RV32IM processor</h1>
+<p>Kareem Abdellatif, Mohamed Aboelfotouh, Moustafa Fayed. 16 November 2026.</p></div>
 
-<div class="line"><b>In one line:</b> a 3-stage pipeline (IF+ID, EX+MEM, WB) around one single-ported byte-addressable memory issues one instruction every 2 cycles (CPI = 2), handles all data and control hazards, and passes every simulation check in all three configurations; the FPGA demonstration is pending.</div>
+<div class="line"><b>In one line:</b> a classic 5-stage pipeline (IF, ID, EX, MEM, WB) around one single-ported memory loses a cycle to the structural conflict between fetch and data access, so one instruction issues every 2 cycles (CPI = 2); data and control hazards are handled in hardware and every simulation check passes; the FPGA demonstration is pending.</div>
 
-<table>
-<tr><th>Item</th><th>Status</th></tr>
+<table><tr><th>Item</th><th>Status</th></tr>
 <tr><td>ISA</td><td>All 42 RV32I instructions + 8 RV32M. EBREAK halts; ECALL, FENCE, FENCE.TSO, PAUSE are NOPs.</td></tr>
-<tr><td>Pipeline</td><td>3 stages of one 2-cycle slot each, single unified memory (C0 fetch, C1 data).</td></tr>
-<tr><td>Bonuses claimed</td><td>Bonus 3 (2-bit BHT + BTB predictor) and Bonus 4 (branch resolution in ID with forwarding and stall). RV32M (Bonus 2) is implemented as an extra and not claimed.</td></tr>
-<tr><td>Simulation</td><td>160 / 160 directed checks in each branch mode; 48-instruction single-cycle test; unit tests; 4 assembly programs x 3 configurations; 17 / 18 mutants detected (1 equivalent).</td></tr>
+<tr><td>Pipeline</td><td>5 stages, one 2-cycle slot each, single unified memory (C0 fetch, C1 data).</td></tr>
+<tr><td>Bonuses claimed</td><td>Bonus 3 (2-bit BHT + BTB predictor) and Bonus 4 (branches and jumps resolved in ID with forwarding and stall). RV32M (Bonus 2) is implemented as an extra and not claimed.</td></tr>
+<tr><td>Simulation</td><td>160 / 160 directed checks; 48-instruction single-cycle test; unit tests; 4 assembly programs x 2 predictor settings; mutation test (Section 5.1).</td></tr>
 <tr><td>Synthesis</td><td>Board top elaborates; Yosys reports no structural problems. Vivado bitstream not yet built.</td></tr>
-<tr><td>FPGA</td><td>Wrapper, clocking, display and constraints written; board run and photos still to be added (Section 9).</td></tr>
-</table>
+<tr><td>FPGA</td><td>Wrapper, clocking, display and constraints written; board run and photos still to be added (Section 7).</td></tr></table>
 
 <h2>1. Pipeline organization</h2>
-<p>The project description allows one memory with one port. Fetch and data access therefore cannot share a cycle, so every pipeline stage takes one <b>slot</b> of two cycles, C0 and C1. The phase controller toggles every clock; the memory address multiplexer gives C0 to the fetch and C1 to the load or store of Stage 1. The structural hazard cannot occur by construction.</p>
-<table>
-<tr><th>Stage</th><th>C0</th><th>C1</th><th>Register at the stage boundary</th></tr>
-<tr><td>Stage 0</td><td>IF: memory reads the word at PC</td><td>ID: decode, register read, immediate (Bonus 4: branch resolution)</td><td>instLatch (end of C0), ID_EX (end of C1)</td></tr>
-<tr><td>Stage 1</td><td>EX: ALU, forwarding, branch resolution when BRANCH_IN_ID = 0</td><td>MEM: memory load / store at EX_MEM address</td><td>EX_MEM (end of C0), MEM_WB (end of C1)</td></tr>
-<tr><td>Stage 2</td><td>WB: register file write at end of C0</td><td>idle</td><td>none</td></tr>
-</table>
-<p>The PC loads at the end of C1. Because the register file is written at the end of C0 and read in C1, an instruction two or more slots behind its producer always reads the new value from the register file.</p>
-<div class="fig"><img src="../../Design/Pipelined_3Stage_Block_Diagram.png"><div class="cap">Figure 1. 3-stage pipelined datapath (Design/Pipelined_3Stage_Block_Diagram.svg / .pdf). Green: Bonus 4 path. Orange: EX resolution and the Bonus 3 predictor. Blue dashed: EX forwarding.</div></div>
-
+<p>The project description allows one memory with one port. Fetch (IF) and data access (MEM) both need it, so they cannot happen in the same cycle. A phase controller toggles every clock: in <b>C0</b> the memory serves the fetch, in <b>C1</b> it serves the load or store of the MEM stage. The structural hazard therefore cannot occur, and the price is a stall every second cycle: the pipeline advances one stage per 2-cycle slot.</p>
+<table><tr><th>Stage</th><th>Work</th><th>Register at the stage boundary</th></tr>
+<tr><td>IF</td><td>PC, predictor lookup, memory read at PC in C0</td><td>instLatch (end of C0), IF_ID (end of C1)</td></tr>
+<tr><td>ID</td><td>decode, register read, immediate; Bonus 4: branch / jump resolved here with ID forwarding</td><td>ID_EX (end of C1)</td></tr>
+<tr><td>EX</td><td>forwarding muxes, ALU (RV32I + M), PC+4 / immediate results</td><td>EX_MEM (end of C0)</td></tr>
+<tr><td>MEM</td><td>load / store at the EX_MEM address in C1</td><td>MEM_WB (end of C1)</td></tr>
+<tr><td>WB</td><td>register file write at the end of C0</td><td>none</td></tr></table>
+<p>The PC loads at the end of C1. The register file is written at the end of C0 and read in C1, so an instruction three or more slots behind its producer reads the new value from the register file without forwarding.</p>
+<div class="fig"><img src="../../Design/Pipelined_5Stage_Block_Diagram.png"><div class="cap">Figure 1. 5-stage pipelined datapath (Design/Pipelined_5Stage_Block_Diagram.svg / .pdf). Green: Bonus 4 (ID resolution, stall). Orange: Bonus 3 predictor update. Blue dashed: EX forwarding.</div></div>
 <div class="rem"><b>Remember</b><ul>
-<li>CPI = 2 is the issue rate; the latency of one instruction is 3 slots = 6 cycles.</li>
-<li>Straight-line code of N instructions ending in EBREAK halts after 2(N + 1) cycles (82 cycles for N = 40, measured).</li>
-<li>Earlier MS3 drafts used 5 stages; the design was restructured to the 3-stage organization of the description (Section 8).</li>
-</ul></div>
+<li>CPI = 2 is the best case; the latency of one instruction is 5 slots = 10 cycles.</li>
+<li>Straight-line code of N instructions ending in EBREAK halts after 2(N + 2) cycles (84 cycles for N = 40, measured in Test 10).</li>
+<li>The 2-cycle slot is forced by the single memory port, not by the ALU or the register file.</li></ul></div>
 
 <h2>2. Data hazards</h2>
-<div class="line"><b>In one line:</b> the only instruction whose result is not yet in the register file is the one directly ahead, and its value sits in MEM_WB while the consumer is in EX, so one forwarding source removes every data stall, including load-use.</div>
-<table>
-<tr><th>Case (producer distance)</th><th>Handling</th><th>Stall slots</th></tr>
-<tr><td>ALU to ALU / store, distance 1</td><td>forward MEM_WB result to EX</td><td>0</td></tr>
-<tr><td>Load to ALU / store, distance 1</td><td>forward MEM_WB load data to EX</td><td>0</td></tr>
-<tr><td>Anything, distance 2 or more</td><td>register file (written end of C0, read in C1)</td><td>0</td></tr>
-<tr><td>Write to x0</td><td>never forwarded (x0 guard in ForwardingUnit)</td><td>0</td></tr>
-</table>
-<table>
-<tr><th>Term</th><th>Plain meaning</th></tr>
-<tr><td>forwardA / forwardB</td><td>2'b01 selects MEM_WB.regWriteData instead of the ID_EX register value.</td></tr>
+<div class="line"><b>In one line:</b> two forwarding sources (EX_MEM, MEM_WB) remove every ALU-to-ALU stall; only a load followed directly by a consumer needs one bubble.</div>
+<table><tr><th>Case (producer distance)</th><th>Handling</th><th>Stall slots</th></tr>
+<tr><td>ALU to ALU / store, distance 1</td><td>forward EX_MEM result to EX</td><td>0</td></tr>
+<tr><td>ALU to ALU / store, distance 2</td><td>forward MEM_WB (regWriteData) to EX</td><td>0</td></tr>
+<tr><td>Load to ALU / store, distance 1</td><td>load-use stall, then forward from MEM_WB</td><td>1</td></tr>
+<tr><td>Distance 3 or more</td><td>register file (written end of C0, read in C1)</td><td>0</td></tr>
+<tr><td>Write to x0</td><td>never forwarded (x0 guard in ForwardingUnit)</td><td>0</td></tr></table>
+<table><tr><th>Term</th><th>Plain meaning</th></tr>
+<tr><td>forwardA / forwardB</td><td>2'b10 selects EX_MEM.result, 2'b01 selects regWriteData, instead of the ID_EX register value.</td></tr>
 <tr><td>regWriteData</td><td>MEM_WB load data or ALU / PC+4 / immediate result, chosen by WbFromMem.</td></tr>
-<tr><td>stall</td><td>Bonus 4 only: PC holds (same word refetched), bubble into ID_EX.</td></tr>
-</table>
+<tr><td>loadUseStall</td><td>HazardUnit: a load in EX whose rd matches a source of the instruction in ID. PC and IF_ID hold, a bubble enters ID_EX.</td></tr></table>
 
-<h2>3. Control hazards and the two bonus modes</h2>
-<p>A parameter <code>BRANCH_IN_ID</code> selects where branches and jumps resolve. Both modes share all other logic and must end with identical architectural state; the testbench checks this.</p>
-<table>
-<tr><th>Property</th><th>BRANCH_IN_ID = 0 (base + Bonus 3)</th><th>BRANCH_IN_ID = 1 (Bonus 4)</th></tr>
-<tr><td>Resolution point</td><td>EX (C0 of Stage 1), forwarded operands</td><td>ID (C1 of Stage 0)</td></tr>
-<tr><td>Wrong next PC</td><td>squash Stage 0 (flush ID_EX), PC = target: 1 slot</td><td>PC loads the resolved target directly: 0 slots</td></tr>
-<tr><td>Operand hazards</td><td>none (EX forwarding)</td><td>ALU result forwarded from EX_MEM; load directly before branch / JALR: 1 stall slot</td></tr>
-<tr><td>Predictor effect</td><td>removes the penalty on learned branches</td><td>none (the next fetch already follows the resolved PC)</td></tr>
-<tr><td>Wrong-path EBREAK</td><td>halt blocked while Stage 1 redirects</td><td>cannot occur</td></tr>
-</table>
-<div class="warn"><b>Trade-off.</b> The two bonuses conflict in a 3-stage design: with resolution in ID the predictor has nothing left to hide. The predictor is therefore demonstrated in EX mode, where it saves 2 cycles per correctly predicted taken branch, and ID resolution is demonstrated in its own mode. The board build uses BRANCH_IN_ID = 1 by default.</div>
-
+<h2>3. Control hazards</h2>
+<p>Branches and jumps are resolved in ID (<b>Bonus 4</b>): a second comparator and target adder sit in ID, fed by ID forwarding. The fetch behind a taken branch is wrong unless the predictor guessed it, so a wrong next PC flushes IF_ID and costs <b>1 slot</b> (2 cycles). The <b>Bonus 3</b> predictor removes that penalty on learned branches.</p>
+<table><tr><th>Case</th><th>Handling</th><th>Penalty</th></tr>
+<tr><td>Not taken, predicted not taken</td><td>none</td><td>0</td></tr>
+<tr><td>Taken, predicted correctly (BTB hit, counter 2 or 3)</td><td>PC already follows the target</td><td>0</td></tr>
+<tr><td>Wrong prediction</td><td>redirect: PC = resolved target, IF_ID flushed</td><td>1 slot</td></tr>
+<tr><td>ALU result needed by a branch / JALR, producer in EX</td><td>stall until the result sits in EX_MEM, then ID forwarding</td><td>1 slot</td></tr>
+<tr><td>Load result needed by a branch / JALR</td><td>stall until the load data is in MEM_WB</td><td>2 slots</td></tr>
+<tr><td>Wrong-path EBREAK</td><td>halt only when EBREAK is in ID and not stalled; redirect flushes it</td><td>0</td></tr></table>
 <h3>3.1 Bonus 3: branch predictor</h3>
-<p>16-entry direct-mapped BTB (index PC[5:2], tag PC[31:6], target) plus a 2-bit saturating counter per entry. Lookup at the fetch PC in C0; a taken prediction loads the BTB target. Counters start at 01; a taken branch that misses the BTB allocates at 10. Update happens when the branch resolves. Test 20 walks one branch through 10, 11, 11, 10, 01, 00, 00, 01, 10, 11, 11, 10, 11, so it reaches strongly not-taken, saturates, and returns to strongly taken; the log matches the expected state after every update.</p>
+<p>16-entry direct-mapped BTB (index PC[5:2], tag PC[31:6], target) plus a 2-bit saturating counter per entry. Lookup at the fetch PC in C0; a taken prediction loads the BTB target. Counters start at 01; a taken branch that misses the BTB allocates at 10. The update happens when the branch resolves in ID. Test 20 walks one branch through the states 10, 11, 11, 10, 01, 00, 00, 01, 10, 11, 11, 10, 11, so it reaches strongly not-taken, saturates, and returns to strongly taken; the log matches the expected state after every update.</p>
 <h3>3.2 Bonus 4: ID-stage resolution</h3>
-<p>A second comparator and target adder sit in ID. During C1 the Stage 1 instruction's ALU result is already in the EX_MEM latch, so it is forwarded to the comparator. A load in Stage 1 delivers its data in that same C1, so HazardUnit stalls a dependent branch or JALR for one slot; afterwards the value is in the register file.</p>
+<p>During C1 the instruction ahead already has its ALU result in the EX_MEM latch, so it is forwarded to the comparator; a load ahead has not yet delivered its data and HazardUnit stalls the branch. The branch comparator and target adder add a path in ID, which lengthens the ID stage but needs no extra stage.</p>
 
 <h2>4. Measured performance (simulation)</h2>
-<div class="fig"><table>
-<tr><th>Program</th><th>ID mode</th><th>EX + predictor</th><th>EX, no predictor</th></tr>
-<tr><td>40 straight-line instructions</td><td>82</td><td>82</td><td>82</td></tr>
-<tr><td>bne loop, 21 instructions retired</td><td>42</td><td>46 (2 mispredicts)</td><td>52 (5 mispredicts)</td></tr>
-<tr><td>12-iteration loop (Test 18)</td><td>80</td><td>84</td><td>102</td></tr>
-<tr><td>Predictor walk + nested loops (Test 20)</td><td>396</td><td>426 (15 mispredicts)</td><td>466 (35 mispredicts)</td></tr>
-<tr><td>Stale-value hazard suite (Test 21)</td><td>500 (9 stalls)</td><td>514</td><td>558</td></tr>
-<tr><td>MS2 full program vs single-cycle (Test 11)</td><td>224</td><td>238</td><td>238</td></tr>
-<tr><td>all_instr.s</td><td>268</td><td>284</td><td>284</td></tr>
-<tr><td>hazards.s</td><td>112</td><td>132</td><td>132</td></tr>
-<tr><td>predictor.s</td><td>582</td><td>656</td><td>730</td></tr>
-</table>
-<p class="cap">Cycles until EBREAK latches. The predictor gives no gain on all_instr.s, hazards.s and Test 11 because their branches execute once, so nothing is learned.</p></div>
+<table><tr><th>Program</th><th>Predictor on</th><th>Predictor off</th></tr>
+<tr><td>40 straight-line instructions + EBREAK (Test 10)</td><td>84</td><td>84</td></tr>
+<tr><td>bne loop, 21 instructions retired (Test 6)</td><td>60 (2 mispredicts)</td><td>66 (5 mispredicts)</td></tr>
+<tr><td>jal loop with beq exit (Test 7)</td><td>48</td><td>54</td></tr>
+<tr><td>Predicted loop, 40 retired (Test 18)</td><td>86</td><td>104</td></tr>
+<tr><td>Predictor walk + nested loops (Test 20)</td><td>428 (15 mispredicts)</td><td>468 (35 mispredicts)</td></tr>
+<tr><td>Stale-value hazard suite (Test 21, 42 stalls)</td><td>600</td><td>644</td></tr>
+<tr><td>MS2 full program vs single-cycle (Test 11)</td><td>240</td><td>240</td></tr>
+<tr><td>all_instr.s</td><td>360</td><td>360</td></tr>
+<tr><td>hazards.s</td><td>170</td><td>170</td></tr>
+<tr><td>predictor.s</td><td>774</td><td>848</td></tr>
+<tr><td>nops_halt.s</td><td>38</td><td>38</td></tr></table>
+<p class="cap">Cycles until EBREAK latches. The predictor gives no gain on all_instr.s, hazards.s and Test 11 because their branches execute once, so nothing is learned.</p>
 
-<h2 class="pb">5. Verification strategy</h2>
-<table>
-<tr><th>Layer</th><th>What it checks</th><th>Result</th></tr>
-<tr><td>unit_tb.v</td><td>PhaseController, UnifiedMem (all widths), BranchPredictor states and aliasing, ForwardingUnit, HazardUnit (12 cases), PipelineReg</td><td>all pass</td></tr>
+<h2>5. Verification strategy</h2>
+<table><tr><th>Layer</th><th>What it checks</th><th>Result</th></tr>
+<tr><td>unit_tb.v</td><td>PhaseController, UnifiedMem (all widths), BranchPredictor states and aliasing, ForwardingUnit, HazardUnit (14 cases), PipelineReg</td><td>all pass</td></tr>
 <tr><td>datapath_tb.v</td><td>single-cycle reference: 40 RV32I + 8 RV32M, ECALL as NOP, EBREAK halt at byte 472</td><td>all pass</td></tr>
-<tr><td>pipeline_tb.v</td><td>23 directed tests, BP-on and BP-off twins, regression against the single-cycle datapath, structural monitors (no write in C0, PC changes only at end of C1). Run with BRANCH_IN_ID = 1 and = 0.</td><td>160 / 160 in each mode</td></tr>
-<tr><td>programs_tb.v + Testing/programs</td><td>4 self-checking assembly programs (x31 = 0 failures, x30 = 0xC0DE), each in 3 configurations</td><td>12 / 12 pass</td></tr>
-<tr><td>Testing/mutation_test.py</td><td>18 injected bugs in pipeline.v</td><td>17 detected, 1 equivalent</td></tr>
-</table>
+<tr><td>pipeline_tb.v</td><td>23 directed tests, BP-on and BP-off twins, regression against the single-cycle datapath, structural monitors (no write in C0, PC changes only at end of C1)</td><td>160 / 160</td></tr>
+<tr><td>programs_tb.v + Testing/programs</td><td>4 self-checking assembly programs (x31 = 0 failures, x30 = 0xC0DE), predictor on and off</td><td>8 / 8 pass</td></tr>
+<tr><td>Testing/mutation_test.py</td><td>19 injected bugs in pipeline.v and HazardUnit.v</td><td>16 detected, 3 equivalent</td></tr></table>
 <h3>5.1 Mutation results</h3>
-<table>
-<tr><th>Injected bug</th><th>Caught by mode</th></tr>
-<tr><td>EX forwarding of rs1 / rs2 removed</td><td>ID and EX</td></tr>
-<tr><td>ID forwarding of rs1 / rs2 removed</td><td>ID</td></tr>
-<tr><td>load-to-branch stall removed; PC ignores stall</td><td>ID</td></tr>
-<tr><td>no squash on EX redirect; wrong-path EBREAK halts</td><td>EX</td></tr>
-<tr><td>JALR target bit 0 not cleared (ID and EX versions)</td><td>ID / EX</td></tr>
-<tr><td>register file writes at end of C1; EX_MEM loads at end of C1</td><td>ID and EX</td></tr>
-<tr><td>predictor updated with the wrong PC; redirect compared with PC+4</td><td>EX / ID</td></tr>
-<tr><td>store data not forwarded; load data replaced by address</td><td>ID and EX</td></tr>
-<tr><td>ID forwarding also forwards loads (survived)</td><td>equivalent: the stall always covers this case</td></tr>
-</table>
+<pre>EX forward rs1 from EX_MEM off       DETECTED
+EX forward rs1 from MEM_WB off       DETECTED
+EX forward rs2 from EX_MEM off       DETECTED
+EX forward rs2 from MEM_WB off       DETECTED
+ID forward rs1 from EX_MEM off       DETECTED
+ID forward rs2 from EX_MEM off       DETECTED
+ID forward rs1 from MEM_WB off       SURVIVED  (equivalent: the register file is written at the end of C0, before the C1 read)
+ID forward also forwards loads       SURVIVED  (equivalent: HazardUnit stalls first, so a load is never in EX_MEM when the branch resolves)
+no load-use stall                    DETECTED
+no branch stall                      DETECTED
+IF_ID not flushed on redirect        DETECTED
+halt ignores stall                   SURVIVED  (equivalent: EBREAK has no source registers, so it never stalls)
+JALR target bit 0 kept               DETECTED
+RegFile writes at end of C1          DETECTED
+PC ignores stall                     DETECTED
+predictor updated with wrong PC      DETECTED
+redirect compared with PC+4          DETECTED
+store data not forwarded             DETECTED
+load data replaced by address        DETECTED</pre>
 <h3>5.2 Assembly programs</h3>
-<table>
-<tr><th>Program</th><th>Content</th></tr>
+<table><tr><th>Program</th><th>Content</th></tr>
 <tr><td>all_instr.s</td><td>one self-checked instance of every RV32I and RV32M operation, sub-word loads and stores, x0 write</td></tr>
 <tr><td>hazards.s</td><td>add / lw directly before taken and not-taken branches, JALR from ALU and from a load, JAL link to branch, load-ALU-store chain, load to store data, x0 write before a branch</td></tr>
 <tr><td>predictor.s</td><td>loop (taken 15 times then exit), alternating branch, nested loops 5 x 4, never-taken branch</td></tr>
-<tr><td>nops_halt.s</td><td>ECALL, FENCE, FENCE.TSO, PAUSE inside a dependent chain; instruction after EBREAK must not run</td></tr>
-</table>
+<tr><td>nops_halt.s</td><td>ECALL, FENCE, FENCE.TSO, PAUSE inside a dependent chain; instruction after EBREAK must not run</td></tr></table>
 
-<h2>6. Waveforms</h2>
-<div class="fig"><img src="../../Testing/waveforms/wave_branch_in_id.png"><div class="cap">Figure 2. BRANCH_IN_ID = 1 on Testing/waveforms/wave.s. Each lw x1 directly before beq x1 raises stall for one slot (PC stays at 0xC, bubble in ID_EX); taken branches redirect with no squash; EBREAK latches the halt.</div></div>
-<div class="fig"><img src="../../Testing/waveforms/wave_ex_no_predictor.png"><div class="cap">Figure 3. BRANCH_IN_ID = 0, predictor off. Every taken branch raises squash: the Stage 0 instruction (addi x9 or the wrong-path ebreak at 0x1C) becomes a bubble, and the wrong-path ebreak does not halt.</div></div>
-<div class="fig"><img src="../../Testing/waveforms/wave_ex_predictor.png"><div class="cap">Figure 4. BRANCH_IN_ID = 0, predictor on. After the first iteration predictTakenEff is high for the learned branches and no squash occurs; only the cold branches and the loop exit cost a slot.</div></div>
+<h2 class="pb">6. Waveforms</h2>
+<div class="fig"><img src="../../Testing/waveforms/wave_predictor_off.png"><div class="cap">Figure 2. Predictor off, Testing/waveforms/wave.s. Each lw x1 directly before beq x1 raises stall for two slots (PC and IF_ID hold, bubbles in ID_EX). Every taken branch raises redirect: the fetched instruction behind it becomes a bubble and the wrong-path ebreak does not halt.</div></div>
+<div class="fig"><img src="../../Testing/waveforms/wave_predictor_on.png"><div class="cap">Figure 3. Predictor on. After the first iteration predictTakenEff is high for the learned branches and no redirect occurs; only the cold branches and the loop exit cost a slot.</div></div>
 
-<h2 class="pb">7. FPGA implementation (Nexys A7-100T)</h2>
+<h2>7. FPGA implementation (Nexys A7-100T)</h2>
 <p>datapath_board_pipelined.v only instantiates the pipeline and adds clocking and display. The program is chosen with the PROGRAM_FILE parameter (a byte-per-line hex file loaded by $readmemh into UnifiedMem).</p>
-<table>
-<tr><th>Control</th><th>Pin</th><th>Function</th></tr>
+<table><tr><th>Control</th><th>Pin</th><th>Function</th></tr>
 <tr><td>CLK100MHZ</td><td>E3</td><td>system clock for debounce, clock generator and display scan</td></tr>
 <tr><td>BTNC</td><td>N17</td><td>step: one press = one CPU clock cycle (runMode = 0)</td></tr>
 <tr><td>SW15</td><td>V10</td><td>reset</td></tr>
@@ -158,57 +147,42 @@ ul { margin: 4px 0 8px 18px; padding: 0; }
 <tr><td>SW0-1</td><td>J15, L16</td><td>LED view: instruction low / high, control flags, pipeline flags</td></tr>
 <tr><td>SW2-5</td><td>M13, R15, R17, T18</td><td>display view: 0 PC, 1 next PC, 2 instruction in ID, 3 ALU result, 4 memory address, 5 memory data, 6 write-back data, 7 store data, 15 x[regSel]</td></tr>
 <tr><td>SW8-12</td><td>T8, U8 (LVCMOS18), R16, T13, H6</td><td>regSel: register shown when display view = 15</td></tr>
-<tr><td>AN0-7, CA-CG, DP</td><td>J17 J18 T9 J14 P14 T14 K2 U13; T10 R10 K16 K13 P15 T11 L18; H15</td><td>8-digit hex display; decimal points and LD15 light on halt</td></tr>
-</table>
+<tr><td>AN0-7, CA-CG, DP</td><td>J17 J18 T9 J14 P14 T14 K2 U13; T10 R10 K16 K13 P15 T11 L18; H15</td><td>8-digit hex display; decimal points and LD15 light on halt</td></tr></table>
 <p>The CPU clock is a registered signal produced in the 100 MHz domain (CpuClockGen.v), so it is glitch free; a clock-enable scheme would be the production choice.</p>
-<div class="warn"><b>Check before submitting.</b> Pins were taken from the plan and the previous constraint file and were not compared with Digilent's master XDC in this session. The bitstream has not been built and the photos below are still missing.</div>
+<div class="warn"><b>Check before submitting.</b> Pins were taken from the plan and the previous constraint file and were not compared with Digilent's master XDC. The bitstream has not been built and the photos below are still missing.</div>
 <h3>Demonstration procedure (per program)</h3>
-<ol>
-<li>Set PROGRAM_FILE to the program's .hex and build the bitstream.</li>
-<li>Reset (SW15 up then down), set runMode, wait for LD15 / decimal points (halt).</li>
-<li>Set display view 15 and regSel = 31, then 30: expect 00000000 and 0000C0DE.</li>
-<li>Photograph both displays. Step mode with view 0 / 2 shows the C0 / C1 behaviour cycle by cycle.</li>
-</ol>
-<p><b>[FPGA photos: to be inserted after the board run.]</b></p>
+<ol><li>Set PROGRAM_FILE to the program's .hex and build the bitstream.</li><li>Reset (SW15 up then down), set runMode, wait for LD15 / decimal points (halt).</li><li>Set display view 15 and regSel = 31, then 30: expect 00000000 and 0000C0DE.</li><li>Photograph both displays. Step mode with view 0 / 2 shows the C0 / C1 behaviour cycle by cycle.</li></ol>
+<div class="warn">[FPGA photos: to be inserted after the board run.]</div>
 
 <h2>8. Issues found and fixed in MS3</h2>
-<table>
-<tr><th>Issue</th><th>Fix</th></tr>
+<table><tr><th>Issue</th><th>Fix</th></tr>
 <tr><td>ECALL halted the CPU (since MS2); the spec allows only EBREAK</td><td>control_unit halts only on inst[31:20] = 0x001; every test program now ends with EBREAK; Test 23 checks the NOPs</td></tr>
-<tr><td>Pipeline had 5 stages (10-cycle latency, load-use stall)</td><td>restructured to the 3-stage organization: IF_ID removed, EX_MEM became the EX-to-MEM latch, single forwarding source, BRANCH_IN_ID parameter; expectations re-baselined</td></tr>
 <tr><td>Board wrapper was a 470-line copy of the pipeline and referenced a missing display driver</td><td>wrapper now instantiates pipeline; new 8-digit hex driver, debouncer and CPU clock generator; debug ports and a debug register read port</td></tr>
 <tr><td>Tests existed only inside the Verilog testbench</td><td>four assembly programs, assembled with LLVM, run unchanged in simulation and on the board</td></tr>
 <tr><td>Mutation harness reported every run as a hang ("changes" contains "hang")</td><td>explicit timeout sentinel; results re-run</td></tr>
-</table>
+<tr><td>Branch comparison in ID needed fresh operands</td><td>ID forwarding from EX_MEM, stall when the operand is a load or still in EX</td></tr></table>
 
 <h2>9. Limitations</h2>
-<ul>
-<li>Memory is 1 KB: code below 0x300, data at 0x300. Raise ADDR_BITS in UnifiedMem for larger programs.</li>
+<ul><li>Memory is 1 KB: code below 0x300, data at 0x300. Raise ADDR_BITS in UnifiedMem for larger programs.</li>
 <li>No traps for misaligned or illegal instructions; RV32M division is combinational.</li>
-<li>FPGA timing, resource use and the board demonstration have not been validated.</li>
-</ul>
+<li>FPGA timing, resource use and the board demonstration have not been validated. The ID stage holds a register read, a comparator and an adder in series, which may limit the clock.</li></ul>
 
 <h2>10. Reproduction</h2>
 <pre>cd Verilog
 SRC=$(ls *.v | grep -v -e _tb -e datapath_board)
-for m in 1 0; do
-  iverilog -g2012 -Wall -Ppipeline_tb.BRANCH_IN_ID=$m -s pipeline_tb -o /tmp/p.out pipeline_tb.v $SRC
-  vvp /tmp/p.out | tail -3
-done
-iverilog -g2012 -Wall -s unit_tb -o /tmp/u.out unit_tb.v $SRC && vvp /tmp/u.out
-iverilog -g2012 -Wall -s datapath_tb -o /tmp/d.out datapath_tb.v $SRC && vvp /tmp/d.out | tail -3
+iverilog -g2012 -Wall -s pipeline_tb -o /tmp/p.out pipeline_tb.v $SRC &amp;&amp; vvp /tmp/p.out | tail -3
+iverilog -g2012 -Wall -s unit_tb -o /tmp/u.out unit_tb.v $SRC &amp;&amp; vvp /tmp/u.out
+iverilog -g2012 -Wall -s datapath_tb -o /tmp/d.out datapath_tb.v $SRC &amp;&amp; vvp /tmp/d.out | tail -3
 sh ../Testing/programs/run_all.sh        # needs llvm-mc, ld.lld, llvm-objcopy
 python3 ../Design/render_pipeline_waveforms.py</pre>
 
 <h2>11. Recap</h2>
-<table>
-<tr><th>Topic</th><th>Key fact</th><th>Number</th></tr>
-<tr><td>Issue rate</td><td>one instruction per 2-cycle slot</td><td>CPI = 2 (no hazards)</td></tr>
-<tr><td>Latency</td><td>3 stages x 2 cycles</td><td>6 cycles</td></tr>
-<tr><td>Data hazards</td><td>single MEM_WB forward + register file written in C0</td><td>0 stalls</td></tr>
-<tr><td>Branch, EX mode</td><td>squash Stage 0 on a wrong prediction</td><td>1 slot</td></tr>
-<tr><td>Branch, ID mode (Bonus 4)</td><td>resolved before the next fetch</td><td>0 slots; 1 stall after a load</td></tr>
+<table><tr><th>Topic</th><th>Key fact</th><th>Number</th></tr>
+<tr><td>Issue rate</td><td>one instruction per 2-cycle slot (single memory port)</td><td>CPI = 2 (no hazards)</td></tr>
+<tr><td>Latency</td><td>5 stages x 2 cycles</td><td>10 cycles</td></tr>
+<tr><td>ALU data hazards</td><td>EX_MEM and MEM_WB forwarding</td><td>0 stalls</td></tr>
+<tr><td>Load-use</td><td>one bubble, then MEM_WB forwarding</td><td>1 slot</td></tr>
+<tr><td>Branch (Bonus 4)</td><td>resolved in ID, IF_ID flushed on a wrong next PC</td><td>1 slot</td></tr>
 <tr><td>Predictor (Bonus 3)</td><td>2-bit counters, 16-entry BTB</td><td>Test 20: 15 vs 35 mispredicts</td></tr>
-<tr><td>Verification</td><td>directed + programs + mutation</td><td>160 x 2, 12 / 12, 17 / 18</td></tr>
-</table>
+<tr><td>Verification</td><td>directed + programs + mutation</td><td>160 / 160, 8 / 8</td></tr></table>
 </body></html>

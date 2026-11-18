@@ -49,9 +49,8 @@ def disasm(w):
         return "ebreak"
     return f"{w:08x}"
 
-ROWS = [("clk", "bit"), ("phase", "bit"), ("pcValue", "hex"), ("idInst", "inst"),
-        ("ID_EX_Inst", "inst"), ("stall", "bit"), ("redirect", "bit"),
-        ("squash", "bit"), ("predictTakenEff", "bit"), ("regWriteEn", "bit"),
+ROWS = [("clk", "bit"), ("phase", "bit"), ("pcValue", "hex"), ("IF_ID_Inst", "inst"),
+        ("ID_EX_Inst", "inst"), ("stall", "bit"), ("redirect", "bit"), ("predictTakenEff", "bit"), ("regWriteEn", "bit"),
         ("MEM_WB_Rd", "dec"), ("regWriteData", "hex"), ("haltLatch", "bit")]
 
 def render(vcd, title, out, tmax):
@@ -70,7 +69,7 @@ def render(vcd, title, out, tmax):
                 lvl = 0.7 if a == "1" else 0.1
                 ax.plot([t0, t1], [y + lvl] * 2, color="#1d4ed8", lw=1.4)
                 ax.plot([t1, t1], [y + 0.1, y + 0.7], color="#1d4ed8", lw=0.6)
-                if name in ("stall", "redirect", "squash") and a == "1":
+                if name in ("stall", "redirect") and a == "1":
                     # shade only C1 (phase = 1): the value used at the end of the slot
                     for p0, p1 in c1:
                         lo, hi = max(t0, p0), min(t1, p1)
@@ -88,7 +87,7 @@ def render(vcd, title, out, tmax):
     ax.set_yticks([])
     ax.set_xticks(range(0, tmax + 1, 20000))
     ax.set_xticklabels([str(t // 1000) for t in range(0, tmax + 1, 20000)], fontsize=8)
-    ax.set_xlabel("time (ns); one slot = C0 + C1 = 20 ns; shading = stall / redirect / squash during C1, when PC and ID_EX load", fontsize=9)
+    ax.set_xlabel("time (ns); one slot = C0 + C1 = 20 ns; shading = stall / redirect during C1, when PC and ID_EX load", fontsize=9)
     ax.set_title(title, fontsize=11, color="#1e3a8a", loc="left")
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
@@ -96,9 +95,8 @@ def render(vcd, title, out, tmax):
     fig.savefig(out, dpi=150)
     plt.close(fig)
 
-cases = [("wave_id.vcd", "BRANCH_IN_ID = 1: lw directly before beq stalls one slot; branches redirect with no squash; EBREAK halts", "wave_branch_in_id.png"),
-         ("wave_ex_nobp.vcd", "BRANCH_IN_ID = 0, BP off: every taken branch squashes the Stage 0 instruction (1-slot penalty)", "wave_ex_no_predictor.png"),
-         ("wave_ex_bp.vcd", "BRANCH_IN_ID = 0, BP on: after the first iteration the taken branches are predicted (no squash)", "wave_ex_predictor.png")]
+cases = [("wave_bp.vcd", "Predictor on: after the first iteration the taken bne is predicted (no redirect); lw directly before beq stalls two slots", "wave_predictor_on.png"),
+         ("wave_nobp.vcd", "Predictor off: every taken branch redirects (1 slot lost); lw directly before beq stalls two slots", "wave_predictor_off.png")]
 for vcd, title, out in cases:
-    render(wdir / vcd, title, wdir / out, 440000)
+    render(wdir / vcd, title, wdir / out, 680000)
     print("wrote", out)

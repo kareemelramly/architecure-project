@@ -1,12 +1,8 @@
-PASS ../Testing/programs/all_instr.hex (ID=1 BP=1): 268 cycles
-PASS ../Testing/programs/hazards.hex (ID=1 BP=1): 112 cycles
-PASS ../Testing/programs/predictor.hex (ID=1 BP=1): 582 cycles
-PASS ../Testing/programs/nops_halt.hex (ID=1 BP=1): 32 cycles
-PASS ../Testing/programs/all_instr.hex (ID=0 BP=1): 284 cycles
-PASS ../Testing/programs/hazards.hex (ID=0 BP=1): 132 cycles
-PASS ../Testing/programs/predictor.hex (ID=0 BP=1): 656 cycles
-PASS ../Testing/programs/nops_halt.hex (ID=0 BP=1): 34 cycles
-PASS ../Testing/programs/all_instr.hex (ID=0 BP=0): 284 cycles
-PASS ../Testing/programs/hazards.hex (ID=0 BP=0): 132 cycles
-PASS ../Testing/programs/predictor.hex (ID=0 BP=0): 730 cycles
-PASS ../Testing/programs/nops_halt.hex (ID=0 BP=0): 34 cycles
+PASS ../Testing/programs/all_instr.hex (BP=1): 360 cycles
+PASS ../Testing/programs/hazards.hex (BP=1): 170 cycles
+PASS ../Testing/programs/predictor.hex (BP=1): 774 cycles
+PASS ../Testing/programs/nops_halt.hex (BP=1): 38 cycles
+PASS ../Testing/programs/all_instr.hex (BP=0): 360 cycles
+PASS ../Testing/programs/hazards.hex (BP=0): 170 cycles
+PASS ../Testing/programs/predictor.hex (BP=0): 848 cycles
+PASS ../Testing/programs/nops_halt.hex (BP=0): 38 cycles

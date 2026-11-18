@@ -15,15 +15,14 @@
 `default_nettype none
 
 module programs_tb #(parameter PROG = "../Testing/programs/all_instr.hex",
-                     parameter BP = 1,
-                     parameter BRANCH_IN_ID = 1);
+                     parameter BP = 1);
     reg clk = 1'b0, reset = 1'b1;
     reg  [4:0]  sel = 5'd31;
     wire [31:0] rdata;
     wire        halt;
     always #5 clk = ~clk;
 
-    pipeline #(.BP_ENABLE(BP), .BRANCH_IN_ID(BRANCH_IN_ID), .PROGRAM_FILE(PROG)) dut(
+    pipeline #(.BP_ENABLE(BP), .PROGRAM_FILE(PROG)) dut(
         .clk(clk), .reset(reset), .dbgRegSel(sel), .dbgRegData(rdata),
         .dbgPC(), .dbgNextPC(), .dbgInst(), .dbgAluResult(), .dbgMemAddr(),
         .dbgMemOut(), .dbgWbData(), .dbgStoreData(), .dbgCtrlFlags(),
@@ -42,7 +41,7 @@ module programs_tb #(parameter PROG = "../Testing/programs/all_instr.hex",
         if (!halt)                 $display("FAIL %0s (BP=%0d): no halt in %0d cycles", PROG, BP, cycles);
         else if (fails !== 32'd0)  $display("FAIL %0s (BP=%0d): x31 = %0d failed checks", PROG, BP, fails);
         else if (sig !== 32'hC0DE) $display("FAIL %0s (BP=%0d): x30 = %h", PROG, BP, sig);
-        else                       $display("PASS %0s (ID=%0d BP=%0d): %0d cycles", PROG, BRANCH_IN_ID, BP, cycles);
+        else                       $display("PASS %0s (BP=%0d): %0d cycles", PROG, BP, cycles);
         $finish;
     end
 endmodule

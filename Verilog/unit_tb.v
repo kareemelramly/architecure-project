@@ -21,10 +21,12 @@ module unit_tb;
     reg [4:0] rs1, rs2, exRd, wbRd; reg exWr, wbWr; wire [1:0] fA, fB;
     ForwardingUnit fu(.idExRs1(rs1), .idExRs2(rs2), .exMemRd(exRd), .memWbRd(wbRd),
         .exMemRegWrite(exWr), .memWbRegWrite(wbWr), .forwardA(fA), .forwardB(fB));
-    // hazard unit (3-stage, Bonus 4: load in Stage 1 -> branch/JALR in ID)
-    reg [31:0] hzInst; reg hzValid, hzMemRead; reg [4:0] hzRd; wire hzStall;
-    HazardUnit hz(.idInst(hzInst), .idValid(hzValid), .stage1MemRead(hzMemRead),
-        .stage1Rd(hzRd), .stall(hzStall));
+    // hazard unit
+    reg [31:0] hzInst; reg hzValid, hzExMemRead, hzExRegWrite, hzMemMemRead;
+    reg [4:0] hzExRd, hzMemRd; wire hzLoadUse, hzBranch, hzStall;
+    HazardUnit hz(.idInst(hzInst), .idValid(hzValid), .idExMemRead(hzExMemRead),
+        .idExRegWrite(hzExRegWrite), .idExRd(hzExRd), .exMemMemRead(hzMemMemRead),
+        .exMemRd(hzMemRd), .loadUseStall(hzLoadUse), .branchStall(hzBranch), .stall(hzStall));
     // pipeline register
     reg prLoad, prFlush; reg [7:0] prD; wire [7:0] prQ;
     PipelineReg #(8) pr(.clk(clk), .rst(rst), .load(prLoad), .flush(prFlush), .D(prD), .Q(prQ));
@@ -61,39 +63,47 @@ module unit_tb;
         upd(32'h440, 0, 0); upd(32'h40, 1, 32'h10); #1 check(pT == 1, "01->10 T, alias untouched");
         pcIF = 32'h440; #1 check(pT == 0, "alias PC miss");
         // ---- HazardUnit ----
-        hzValid = 1; hzMemRead = 1; hzRd = 2;
-        // beq x1,x2 behind lw x2 -> stall (load data arrives in the same C1)
-        hzInst = 32'b0000000_00010_00001_000_01000_1100011; #1;
-        check(hzStall, "hazard: lw -> branch rs2 stalls");
-        hzRd = 1; #1;
-        check(hzStall, "hazard: lw -> branch rs1 stalls");
-        // same branch behind an ALU result: forwarded from EX_MEM, no stall
-        hzMemRead = 0; #1;
-        check(!hzStall, "hazard: ALU -> branch forwards, no stall");
-        // jalr x2, 0(x1) behind lw x1
-        hzInst = 32'b000000000000_00001_000_00010_1100111; hzMemRead = 1; hzRd = 1; #1;
-        check(hzStall, "hazard: lw -> jalr base stalls");
-        // jalr has no rs2: imm bits in the rs2 field must not match
-        hzInst = 32'b000000000010_00011_000_00010_1100111; hzRd = 2; #1;
-        check(!hzStall, "hazard: jalr ignores rs2 field");
-        // add / store behind a load: EX forwards from MEM_WB, no stall
-        hzInst = 32'b0000000_00001_00110_000_00111_0110011; hzRd = 6; #1;
-        check(!hzStall, "hazard: lw -> add never stalls (3-stage)");
-        hzInst = 32'b0000000_00110_00000_010_01000_0100011; #1;
-        check(!hzStall, "hazard: lw -> sw data never stalls");
-        // EBREAK has 1 in its rs2 field
-        hzInst = 32'h00100073; hzRd = 1; #1;
-        check(!hzStall, "hazard: EBREAK never stalls");
+        hzValid = 1; hzExMemRead = 0; hzExRegWrite = 0; hzMemMemRead = 0; hzExRd = 0; hzMemRd = 0;
+        // add x7, x6, x1 behind lw x6 -> load-use
+        hzInst = 32'b0000000_00001_00110_000_00111_0110011; hzExMemRead = 1; hzExRegWrite = 1; hzExRd = 6; #1;
+        check(hzLoadUse && hzStall && !hzBranch, "hazard: load-use stall");
+        // same add behind an ALU result (not a load): no stall
+        hzExMemRead = 0; #1;
+        check(!hzStall, "hazard: ALU->add needs no stall (EX forwarding)");
+        // store reads rs2 = x6 behind lw x6
+        hzInst = 32'b0000000_00110_00000_010_01000_0100011; hzExMemRead = 1; #1;
+        check(hzLoadUse, "hazard: load -> store data stalls");
+        // LUI has garbage rs fields: must not stall
+        hzInst = 32'b00000000000000000110_00111_0110111; hzExRd = 6; #1;
+        check(!hzStall, "hazard: LUI ignores rs fields");
+        // EBREAK has 1 in rs2 field: must not stall behind a write to x1
+        hzInst = 32'h00100073; hzExRd = 1; hzExMemRead = 1; hzExRegWrite = 1; #1;
+        check(!hzStall, "hazard: EBREAK never stalls behind a load");
+        // beq x1,x2 behind ALU writing x2 -> branch stall
+        hzInst = 32'b0000000_00010_00001_000_01000_1100011; hzExRd = 2; hzExMemRead = 0; hzExRegWrite = 1; #1;
+        check(hzBranch && !hzLoadUse && hzStall, "hazard: ALU->branch stalls");
+        // same, ALU result already in MEM (not a load): forwarded, no stall
+        hzExRegWrite = 0; hzExRd = 0; hzMemRd = 2; hzMemMemRead = 0; #1;
+        check(!hzStall, "hazard: branch with ALU in MEM forwards");
+        // load in MEM feeds the branch: stall
+        hzMemMemRead = 1; #1;
+        check(hzBranch && hzStall, "hazard: load in MEM -> branch stalls");
+        // load in EX feeds the branch: load-use and branch stall both
+        hzMemMemRead = 0; hzMemRd = 0; hzExMemRead = 1; hzExRegWrite = 1; hzExRd = 1; #1;
+        check(hzLoadUse && hzBranch, "hazard: load in EX -> branch stalls");
+        // jalr x2, 0(x1) behind ALU writing x1
+        hzInst = 32'b000000000000_00001_000_00010_1100111; hzExMemRead = 0; hzExRd = 1; #1;
+        check(hzBranch, "hazard: ALU->jalr base stalls");
         // jal reads no registers
-        hzInst = 32'b0_0000001000_0_00000000_00001_1101111; hzRd = 0; #1;
+        hzInst = 32'b0_0000001000_0_00000000_00001_1101111; hzExRd = 0; hzMemRd = 0; #1;
         check(!hzStall, "hazard: jal never stalls");
-        // rd = x0 never matches
-        hzInst = 32'b0000000_00000_00000_000_01000_1100011; hzRd = 0; #1;
+        // x0 destination never matches
+        hzInst = 32'b0000000_00000_00000_000_01000_1100011; hzExRd = 0; hzExMemRead = 1; #1;
         check(!hzStall, "hazard: rd = x0 never stalls");
-        // bubble / invalid ID
-        hzInst = 32'd0; #1;
+        // bubble in ID
+        hzInst = 32'd0; hzExRd = 0; #1;
         check(!hzStall, "hazard: bubble never stalls");
-        hzInst = 32'b0000000_00010_00001_000_01000_1100011; hzValid = 0; hzRd = 1; #1;
+        hzInst = 32'b0000000_00010_00001_000_01000_1100011; hzValid = 0; hzExRd = 1; hzExRegWrite = 1; #1;
         check(!hzStall, "hazard: invalid ID never stalls");
         // ---- ForwardingUnit ----
         rs1 = 5; rs2 = 6; exRd = 5; wbRd = 6; exWr = 1; wbWr = 1; #1;

@@ -1,0 +1,55 @@
+== Unit tests
+PASS ALU_tb: 37152 checks
+PASS UnifiedMem_tb
+PASS ForwardingUnit_tb
+PASS PhaseController_tb
+PASS PipelineReg_tb
+== Project programs (1 KB memory, same images as the FPGA)
+PASS ../Testing/programs/all_instr.hex: halted in cycle 292, 87 register writes
+PASS ../Testing/programs/hazards.hex: halted in cycle 196, 47 register writes
+PASS ../Testing/programs/nops_halt.hex: halted in cycle 34, 9 register writes
+PASS ../Testing/programs/demo.hex: halted in cycle 18, 5 register writes
+PASS ../Testing/programs/timing.hex: halted in cycle 22, 10 register writes
+== Official riscv-tests rv32ui (8 KB memory)
+PASS ../Testing/compliance/add.hex: halted in cycle 888, 320 register writes
+PASS ../Testing/compliance/addi.hex: halted in cycle 424, 154 register writes
+PASS ../Testing/compliance/and.hex: halted in cycle 928, 351 register writes
+PASS ../Testing/compliance/andi.hex: halted in cycle 336, 121 register writes
+PASS ../Testing/compliance/auipc.hex: halted in cycle 50, 17 register writes
+PASS ../Testing/compliance/beq.hex: halted in cycle 562, 149 register writes
+PASS ../Testing/compliance/bge.hex: halted in cycle 616, 158 register writes
+PASS ../Testing/compliance/bgeu.hex: halted in cycle 666, 183 register writes
+PASS ../Testing/compliance/blt.hex: halted in cycle 562, 149 register writes
+PASS ../Testing/compliance/bltu.hex: halted in cycle 612, 174 register writes
+PASS ../Testing/compliance/bne.hex: halted in cycle 566, 149 register writes
+PASS ../Testing/compliance/jal.hex: halted in cycle 42, 13 register writes
+PASS ../Testing/compliance/jalr.hex: halted in cycle 182, 60 register writes
+PASS ../Testing/compliance/lb.hex: halted in cycle 446, 165 register writes
+PASS ../Testing/compliance/lbu.hex: halted in cycle 446, 165 register writes
+PASS ../Testing/compliance/ld_st.hex: halted in cycle 1854, 587 register writes
+PASS ../Testing/compliance/lh.hex: halted in cycle 478, 181 register writes
+PASS ../Testing/compliance/lhu.hex: halted in cycle 496, 190 register writes
+PASS ../Testing/compliance/lui.hex: halted in cycle 58, 20 register writes
+PASS ../Testing/compliance/lw.hex: halted in cycle 506, 195 register writes
+PASS ../Testing/compliance/or.hex: halted in cycle 934, 354 register writes
+PASS ../Testing/compliance/ori.hex: halted in cycle 350, 128 register writes
+PASS ../Testing/compliance/sb.hex: halted in cycle 876, 282 register writes
+PASS ../Testing/compliance/sh.hex: halted in cycle 982, 335 register writes
+PASS ../Testing/compliance/simple.hex: halted in cycle 8, 3 register writes
+PASS ../Testing/compliance/sll.hex: halted in cycle 944, 344 register writes
+PASS ../Testing/compliance/slli.hex: halted in cycle 422, 153 register writes
+PASS ../Testing/compliance/slt.hex: halted in cycle 876, 314 register writes
+PASS ../Testing/compliance/slti.hex: halted in cycle 414, 149 register writes
+PASS ../Testing/compliance/sltiu.hex: halted in cycle 414, 149 register writes
+PASS ../Testing/compliance/sltu.hex: halted in cycle 876, 314 register writes
+PASS ../Testing/compliance/sra.hex: halted in cycle 982, 362 register writes
+PASS ../Testing/compliance/srai.hex: halted in cycle 452, 168 register writes
+PASS ../Testing/compliance/srl.hex: halted in cycle 970, 356 register writes
+PASS ../Testing/compliance/srli.hex: halted in cycle 440, 162 register writes
+PASS ../Testing/compliance/st_ld.hex: halted in cycle 894, 347 register writes
+PASS ../Testing/compliance/sub.hex: halted in cycle 872, 313 register writes
+PASS ../Testing/compliance/sw.hex: halted in cycle 996, 343 register writes
+PASS ../Testing/compliance/xor.hex: halted in cycle 932, 353 register writes
+PASS ../Testing/compliance/xori.hex: halted in cycle 354, 130 register writes
+== Board top (step mode, free run, display)
+PASS datapath_board_pipelined_tb

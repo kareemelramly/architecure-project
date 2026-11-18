@@ -1,18 +1,19 @@
-EX forward rs1 off             DETECTED by ID+EX
-EX forward rs2 off             DETECTED by ID+EX
-ID forward rs1 off             DETECTED by ID
-ID forward rs2 off             DETECTED by ID
-ID forward loads too           SURVIVED
-no load->branch stall          DETECTED by ID
-no squash flush                DETECTED by EX
-wrong-path halt sticks         DETECTED by EX
-ID jalr bit0 kept              DETECTED by ID
-EX jalr bit0 kept              DETECTED by EX
-RegFile writes end of C1       DETECTED by ID+EX
-EX_MEM loads end of C1         DETECTED by ID+EX
-PC ignores stall               DETECTED by ID
-EX BP update wrong PC          DETECTED by EX
-EX redirect vs PC+4            DETECTED by EX
-ID redirect vs PC+4            DETECTED by ID
-store data unforwarded         DETECTED by ID+EX
-MEM_WB load data from result   DETECTED by ID+EX
+EX forward rs1 from EX_MEM off       DETECTED
+EX forward rs1 from MEM_WB off       DETECTED
+EX forward rs2 from EX_MEM off       DETECTED
+EX forward rs2 from MEM_WB off       DETECTED
+ID forward rs1 from EX_MEM off       DETECTED
+ID forward rs2 from EX_MEM off       DETECTED
+ID forward rs1 from MEM_WB off       SURVIVED  (equivalent: the register file is written at the end of C0, before the C1 read)
+ID forward also forwards loads       SURVIVED  (equivalent: HazardUnit stalls first, so a load is never in EX_MEM when the branch resolves)
+no load-use stall                    DETECTED
+no branch stall                      DETECTED
+IF_ID not flushed on redirect        DETECTED
+halt ignores stall                   SURVIVED  (equivalent: EBREAK has no source registers, so it never stalls)
+JALR target bit 0 kept               DETECTED
+RegFile writes at end of C1          DETECTED
+PC ignores stall                     DETECTED
+predictor updated with wrong PC      DETECTED
+redirect compared with PC+4          DETECTED
+store data not forwarded             DETECTED
+load data replaced by address        DETECTED

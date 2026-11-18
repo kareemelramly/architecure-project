@@ -2,19 +2,15 @@
  * Module: HazardUnit.v
  * Project: femtoRV32
  * Author: Mohamed AboElfotouh
- * Description: ID-stage hazard detection for Bonus 4 (branches resolved in ID)
- *              in the 3-stage pipeline. The only hazard left is a branch or
- *              JALR in ID (C1 of Stage 0) whose operand is being loaded by
- *              the Stage 1 instruction: the load data is read from memory in
- *              that same C1, so the branch waits one slot. ALU results are
- *              forwarded from EX_MEM and need no stall, and ordinary
- *              instructions never stall (EX forwards load data from MEM_WB).
- *              stall keeps the PC (same word refetched) and puts a bubble
- *              into ID_EX.
+ * Description: ID-stage hazard detection (Bonus 4).
+ *              loadUseStall : a load in EX feeds any instruction in ID
+ *              branchStall  : a branch/JALR in ID (operands needed in ID)
+ *                             depends on an ALU result still in EX, or on a
+ *                             load that is in MEM
+ *              stall freezes PC + IF_ID and inserts a bubble into ID_EX.
  *
  * Change history:
- *   11/13/26 - Created ID-stage load-use and branch stall detection (5 stages)
- *   11/16/26 - 3-stage pipeline: reduced to the load -> branch/JALR rule
+ *   11/13/26 - Created ID-stage load-use and branch stall detection
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -23,28 +19,48 @@
 module HazardUnit(
     input  [31:0] idInst,
     input         idValid,
-    input         stage1MemRead,
-    input  [4:0]  stage1Rd,
+    input         idExMemRead,
+    input         idExRegWrite,
+    input  [4:0]  idExRd,
+    input         exMemMemRead,
+    input  [4:0]  exMemRd,
+    output        loadUseStall,
+    output        branchStall,
     output        stall
 );
 
     wire [4:0] opcode;
     wire [4:0] rs1;
     wire [4:0] rs2;
-    wire       isBranch;
-    wire       isJalr;
-    wire       match;
+    wire       usesRs1;
+    wire       usesRs2;
+    wire       readsInId;
+    wire       matchEx;
+    wire       matchMem;
 
-    assign opcode   = idInst[6:2];
-    assign rs1      = idInst[19:15];
-    assign rs2      = idInst[24:20];
-    assign isBranch = idValid && (opcode == `OPC_BRANCH);
-    assign isJalr   = idValid && (opcode == `OPC_JALR);
+    assign opcode = idInst[6:2];
+    assign rs1    = idInst[19:15];
+    assign rs2    = idInst[24:20];
 
-    assign match = (stage1Rd != 5'd0) &&
-                   (((isBranch || isJalr) && (stage1Rd == rs1)) ||
-                    (isBranch && (stage1Rd == rs2)));
+    // Only real source operands count (EBREAK has 1 in the rs2 field)
+    assign usesRs1 = idValid &&
+                     ((opcode == `OPC_OP)    || (opcode == `OPC_OP_IMM) ||
+                      (opcode == `OPC_LOAD)  || (opcode == `OPC_STORE)  ||
+                      (opcode == `OPC_BRANCH)|| (opcode == `OPC_JALR));
+    assign usesRs2 = idValid &&
+                     ((opcode == `OPC_OP)    || (opcode == `OPC_STORE)  ||
+                      (opcode == `OPC_BRANCH));
+    assign readsInId = idValid &&
+                       ((opcode == `OPC_BRANCH) || (opcode == `OPC_JALR));
 
-    assign stall = stage1MemRead && match;
+    assign matchEx  = (idExRd != 5'd0) &&
+                      ((usesRs1 && (idExRd == rs1)) || (usesRs2 && (idExRd == rs2)));
+    assign matchMem = (exMemRd != 5'd0) &&
+                      ((usesRs1 && (exMemRd == rs1)) || (usesRs2 && (exMemRd == rs2)));
+
+    assign loadUseStall = idExMemRead && matchEx;
+    assign branchStall  = readsInId &&
+                          ((idExRegWrite && matchEx) || (exMemMemRead && matchMem));
+    assign stall        = loadUseStall | branchStall;
 
 endmodule
