@@ -1,8 +1,9 @@
-no forwarding (rs1)      CAUGHT by all_instr.hex
-no forwarding (rs2)      CAUGHT by all_instr.hex
-no wrong-path flush      CAUGHT by all_instr.hex
-RF written in C1         CAUGHT by all_instr.hex
-EBREAK does not halt     CAUGHT by all_instr.hex
-JALR bit 0 kept          CAUGHT by all_instr.hex
-MEM_WB in C0             CAUGHT by all_instr.hex
-7 / 7 mutants caught
+no forwarding (rs1)      CAUGHT by full_test.hex
+no forwarding (rs2)      CAUGHT by full_test.hex
+no load forwarding       CAUGHT by full_test.hex
+branch not taken in ID   CAUGHT by full_test.hex
+RF written in C1         CAUGHT by full_test.hex
+EBREAK does not halt     CAUGHT by full_test.hex
+JALR bit 0 kept          CAUGHT by full_test.hex
+MEM_WB in C0             CAUGHT by full_test.hex
+8 / 8 mutants caught

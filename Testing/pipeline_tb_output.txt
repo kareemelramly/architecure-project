@@ -1,0 +1,252 @@
+pipeline_tb: ../Testing/programs/full_test.hex
+PASS    1  pc=00000000  ADDI      x31 = 00000000
+PASS    2  pc=00000004  ADDI      x1  = 00000001
+PASS    3  pc=00000008  ECALL     no effect (rd = x0 or NOP)
+PASS    4  pc=0000000c  ADDI      x1  = 00000002  RAW x1 (distance 2) from reg file
+PASS    5  pc=00000010  FENCE     no effect (rd = x0 or NOP)
+PASS    6  pc=00000014  ADDI      x1  = 00000003  RAW x1 (distance 2) from reg file
+PASS    7  pc=00000018  FENCE.TSO no effect (rd = x0 or NOP)
+PASS    8  pc=0000001c  ADDI      x1  = 00000004  RAW x1 (distance 2) from reg file
+PASS    9  pc=00000020  PAUSE     no effect (rd = x0 or NOP)
+PASS   10  pc=00000024  ADDI      x1  = 00000005  RAW x1 (distance 2) from reg file
+PASS   11  pc=00000028  ADDI      x2  = 00000005
+PASS   12  pc=0000002c  BNE       not taken  RAW x2 from ADDI forwarded to ID
+PASS   13  pc=00000030  AUIPC     x20 = 00001030
+PASS   14  pc=00000034  ADDI      x20 = 00001000  RAW x20 from AUIPC forwarded to ID
+PASS   15  pc=00000038  ADDI      x1  = 0000000c
+PASS   16  pc=0000003c  ADDI      x2  = fffffffb
+PASS   17  pc=00000040  ADD       x3  = 00000007  RAW x2 from ADDI forwarded to ID
+PASS   18  pc=00000044  ADDI      x4  = 00000007
+PASS   19  pc=00000048  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   20  pc=0000004c  SUB       x3  = 00000011
+PASS   21  pc=00000050  ADDI      x4  = 00000011
+PASS   22  pc=00000054  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   23  pc=00000058  SLL       x3  = 0000c000
+PASS   24  pc=0000005c  LUI       x4  = 0000c000
+PASS   25  pc=00000060  BNE       not taken  RAW x4 from LUI forwarded to ID
+PASS   26  pc=00000064  SLT       x3  = 00000001
+PASS   27  pc=00000068  ADDI      x4  = 00000001
+PASS   28  pc=0000006c  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   29  pc=00000070  SLTU      x3  = 00000000
+PASS   30  pc=00000074  BNE       not taken  RAW x3 from SLTU forwarded to ID
+PASS   31  pc=00000078  XOR       x3  = fffffff7
+PASS   32  pc=0000007c  ADDI      x4  = fffffff7
+PASS   33  pc=00000080  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   34  pc=00000084  SRL       x3  = 000001ff  RAW x4 (distance 2) from reg file
+PASS   35  pc=00000088  ADDI      x4  = 000001ff
+PASS   36  pc=0000008c  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   37  pc=00000090  SRA       x3  = ffffffff
+PASS   38  pc=00000094  ADDI      x4  = ffffffff
+PASS   39  pc=00000098  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   40  pc=0000009c  OR        x3  = ffffffff
+PASS   41  pc=000000a0  ADDI      x4  = ffffffff
+PASS   42  pc=000000a4  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   43  pc=000000a8  AND       x3  = 00000008
+PASS   44  pc=000000ac  ADDI      x4  = 00000008
+PASS   45  pc=000000b0  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   46  pc=000000b4  ADDI      x3  = 0000000a
+PASS   47  pc=000000b8  ADDI      x4  = 0000000a
+PASS   48  pc=000000bc  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   49  pc=000000c0  SLTI      x3  = 00000001
+PASS   50  pc=000000c4  ADDI      x4  = 00000001
+PASS   51  pc=000000c8  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   52  pc=000000cc  SLTIU     x3  = 00000000
+PASS   53  pc=000000d0  BNE       not taken  RAW x3 from SLTIU forwarded to ID
+PASS   54  pc=000000d4  XORI      x3  = 00000009
+PASS   55  pc=000000d8  ADDI      x4  = 00000009
+PASS   56  pc=000000dc  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   57  pc=000000e0  ORI       x3  = 0000000f
+PASS   58  pc=000000e4  ADDI      x4  = 0000000f
+PASS   59  pc=000000e8  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   60  pc=000000ec  ANDI      x3  = 00000004
+PASS   61  pc=000000f0  ADDI      x4  = 00000004
+PASS   62  pc=000000f4  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   63  pc=000000f8  SLLI      x3  = 00000030
+PASS   64  pc=000000fc  ADDI      x4  = 00000030
+PASS   65  pc=00000100  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   66  pc=00000104  SRLI      x3  = 00000003
+PASS   67  pc=00000108  ADDI      x4  = 00000003
+PASS   68  pc=0000010c  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   69  pc=00000110  SRAI      x3  = fffffffd
+PASS   70  pc=00000114  ADDI      x4  = fffffffd
+PASS   71  pc=00000118  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   72  pc=0000011c  LUI       x3  = 12345000
+PASS   73  pc=00000120  LUI       x4  = 12345000
+PASS   74  pc=00000124  BNE       not taken  RAW x4 from LUI forwarded to ID
+PASS   75  pc=00000128  AUIPC     x3  = 00000128
+PASS   76  pc=0000012c  JAL       x5  = 00000130  jump -> 00000130 (in ID, 0 lost cycles)
+PASS   77  pc=00000130  ADDI      x5  = 00000128  RAW x5 from JAL forwarded to ID
+PASS   78  pc=00000134  BNE       not taken  RAW x5 from ADDI forwarded to ID
+PASS   79  pc=00000138  LUI       x6  = 80f1f000
+PASS   80  pc=0000013c  ADDI      x6  = 80f1f2f3  RAW x6 from LUI forwarded to ID
+PASS   81  pc=00000140  SW        mem[00001000] <= 80f1f2f3  RAW x6 from ADDI forwarded to ID
+PASS   82  pc=00000144  LW        x3  = 80f1f2f3
+PASS   83  pc=00000148  BNE       not taken  RAW x3 from LW forwarded to ID
+PASS   84  pc=0000014c  LB        x3  = fffffff3
+PASS   85  pc=00000150  ADDI      x4  = fffffff3
+PASS   86  pc=00000154  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   87  pc=00000158  LBU       x3  = 000000f3
+PASS   88  pc=0000015c  ADDI      x4  = 000000f3
+PASS   89  pc=00000160  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   90  pc=00000164  LH        x3  = ffff80f1
+PASS   91  pc=00000168  LUI       x4  = ffff8000
+PASS   92  pc=0000016c  ADDI      x4  = ffff80f1  RAW x4 from LUI forwarded to ID
+PASS   93  pc=00000170  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   94  pc=00000174  LHU       x3  = 000080f1
+PASS   95  pc=00000178  LUI       x4  = 00008000
+PASS   96  pc=0000017c  ADDI      x4  = 000080f1  RAW x4 from LUI forwarded to ID
+PASS   97  pc=00000180  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS   98  pc=00000184  SB        mem[00001004] <= 0000000c
+PASS   99  pc=00000188  SH        mem[00001006] <= fffffffb
+PASS  100  pc=0000018c  LW        x3  = fffb000c
+PASS  101  pc=00000190  LUI       x4  = fffb0000
+PASS  102  pc=00000194  ADDI      x4  = fffb000c  RAW x4 from LUI forwarded to ID
+PASS  103  pc=00000198  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  104  pc=0000019c  BEQ       taken -> 000001a4 (in ID, 0 lost cycles)
+PASS  105  pc=000001a4  BNE       taken -> 000001ac (in ID, 0 lost cycles)
+PASS  106  pc=000001ac  BLT       taken -> 000001b4 (in ID, 0 lost cycles)
+PASS  107  pc=000001b4  BGE       taken -> 000001bc (in ID, 0 lost cycles)
+PASS  108  pc=000001bc  BLTU      taken -> 000001c4 (in ID, 0 lost cycles)
+PASS  109  pc=000001c4  BGEU      taken -> 000001cc (in ID, 0 lost cycles)
+PASS  110  pc=000001cc  JAL       x7  = 000001d0  jump -> 000001d4 (in ID, 0 lost cycles)
+PASS  111  pc=000001d4  AUIPC     x8  = 000001d4
+PASS  112  pc=000001d8  ADDI      x8  = 000001e4  RAW x8 from AUIPC forwarded to ID
+PASS  113  pc=000001dc  JALR      x9  = 000001e0  jump -> 000001e4 (in ID, 0 lost cycles), RAW x8 from ADDI forwarded to ID
+PASS  114  pc=000001e4  AUIPC     x4  = 000001e4
+PASS  115  pc=000001e8  ADDI      x4  = 000001e0  RAW x4 from AUIPC forwarded to ID
+PASS  116  pc=000001ec  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  117  pc=000001f0  ADDI      x10 = 00000007
+PASS  118  pc=000001f4  ADDI      x11 = fffffffd
+PASS  119  pc=000001f8  MUL       x3  = ffffffeb  RAW x11 from ADDI forwarded to ID
+PASS  120  pc=000001fc  ADDI      x4  = ffffffeb
+PASS  121  pc=00000200  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  122  pc=00000204  MULH      x3  = ffffffff
+PASS  123  pc=00000208  ADDI      x4  = ffffffff
+PASS  124  pc=0000020c  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  125  pc=00000210  MULHU     x3  = 00000006
+PASS  126  pc=00000214  ADDI      x4  = 00000006
+PASS  127  pc=00000218  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  128  pc=0000021c  MULHSU    x3  = ffffffff
+PASS  129  pc=00000220  ADDI      x4  = ffffffff
+PASS  130  pc=00000224  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  131  pc=00000228  DIV       x3  = fffffffe
+PASS  132  pc=0000022c  ADDI      x4  = fffffffe
+PASS  133  pc=00000230  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  134  pc=00000234  DIVU      x3  = 00000000
+PASS  135  pc=00000238  BNE       not taken  RAW x3 from DIVU forwarded to ID
+PASS  136  pc=0000023c  REM       x3  = 00000001
+PASS  137  pc=00000240  ADDI      x4  = 00000001
+PASS  138  pc=00000244  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  139  pc=00000248  REMU      x3  = 00000007
+PASS  140  pc=0000024c  ADDI      x4  = 00000007
+PASS  141  pc=00000250  BNE       not taken  RAW x4 from ADDI forwarded to ID
+PASS  142  pc=00000254  ADDI      no effect (rd = x0 or NOP)
+PASS  143  pc=00000258  BNE       not taken
+PASS  144  pc=0000025c  ADDI      x1  = 0000000c
+PASS  145  pc=00000260  ADDI      x2  = fffffffb
+PASS  146  pc=00000264  BEQ       not taken  RAW x2 from ADDI forwarded to ID
+PASS  147  pc=00000268  BNE       not taken
+PASS  148  pc=0000026c  BLT       not taken
+PASS  149  pc=00000270  BGE       not taken
+PASS  150  pc=00000274  BLTU      not taken
+PASS  151  pc=00000278  BGEU      not taken
+PASS  152  pc=0000027c  ADDI      x5  = 00000000
+PASS  153  pc=00000280  ADDI      x6  = 00000004
+PASS  154  pc=00000284  ADDI      x5  = 00000001  RAW x5 (distance 2) from reg file
+PASS  155  pc=00000288  BLT       taken -> 00000284 (in ID, 0 lost cycles)  RAW x5 from ADDI forwarded to ID
+PASS  156  pc=00000284  ADDI      x5  = 00000002  RAW x5 (distance 2) from reg file
+PASS  157  pc=00000288  BLT       taken -> 00000284 (in ID, 0 lost cycles)  RAW x5 from ADDI forwarded to ID
+PASS  158  pc=00000284  ADDI      x5  = 00000003  RAW x5 (distance 2) from reg file
+PASS  159  pc=00000288  BLT       taken -> 00000284 (in ID, 0 lost cycles)  RAW x5 from ADDI forwarded to ID
+PASS  160  pc=00000284  ADDI      x5  = 00000004  RAW x5 (distance 2) from reg file
+PASS  161  pc=00000288  BLT       not taken  RAW x5 from ADDI forwarded to ID
+PASS  162  pc=0000028c  BNE       not taken  RAW x5 (distance 2) from reg file
+PASS  163  pc=00000290  AUIPC     x20 = 00001290
+PASS  164  pc=00000294  ADDI      x20 = 00001008  RAW x20 from AUIPC forwarded to ID
+PASS  165  pc=00000298  ADDI      x1  = 00000005
+PASS  166  pc=0000029c  ADDI      x2  = 00000000  RAW x1 from ADDI forwarded to ID
+PASS  167  pc=000002a0  BEQ       taken -> 000002a8 (in ID, 0 lost cycles)  RAW x2 from ADDI forwarded to ID
+PASS  168  pc=000002a8  ADDI      x3  = 00000007
+PASS  169  pc=000002ac  BEQ       not taken  RAW x3 from ADDI forwarded to ID
+PASS  170  pc=000002b0  JAL       taken -> 000002b8 (in ID, 0 lost cycles)
+PASS  171  pc=000002b8  LW        x4  = 12345678
+PASS  172  pc=000002bc  BNE       taken -> 000002c4 (in ID, 0 lost cycles)  RAW x4 from LW forwarded to ID
+PASS  173  pc=000002c4  LW        x5  = 00000000
+PASS  174  pc=000002c8  BNE       not taken  RAW x5 from LW forwarded to ID
+PASS  175  pc=000002cc  JAL       taken -> 000002d4 (in ID, 0 lost cycles)
+PASS  176  pc=000002d4  LW        x6  = 12345678
+PASS  177  pc=000002d8  ADDI      x7  = 00000001
+PASS  178  pc=000002dc  BNE       taken -> 000002e4 (in ID, 0 lost cycles)  RAW x6 (distance 2) from reg file
+PASS  179  pc=000002e4  ADDI      x8  = 00000003
+PASS  180  pc=000002e8  ADDI      x9  = 00000004
+PASS  181  pc=000002ec  BNE       taken -> 000002f4 (in ID, 0 lost cycles)  RAW x9 from ADDI forwarded to ID
+PASS  182  pc=000002f4  ADD       x10 = 00000007  RAW x9 (distance 2) from reg file
+PASS  183  pc=000002f8  ADDI      x11 = 00000007
+PASS  184  pc=000002fc  BEQ       taken -> 00000304 (in ID, 0 lost cycles)  RAW x11 from ADDI forwarded to ID
+PASS  185  pc=00000304  AUIPC     x12 = 00000304
+PASS  186  pc=00000308  ADDI      x12 = 00000314  RAW x12 from AUIPC forwarded to ID
+PASS  187  pc=0000030c  JALR      x13 = 00000310  jump -> 00000314 (in ID, 0 lost cycles), RAW x12 from ADDI forwarded to ID
+PASS  188  pc=00000314  AUIPC     x14 = 00000314
+PASS  189  pc=00000318  ADDI      x14 = 0000032c  RAW x14 from AUIPC forwarded to ID
+PASS  190  pc=0000031c  SW        mem[00001010] <= 0000032c  RAW x14 from ADDI forwarded to ID
+PASS  191  pc=00000320  LW        x15 = 0000032c
+PASS  192  pc=00000324  JALR      taken -> 0000032c (in ID, 0 lost cycles)  RAW x15 from LW forwarded to ID
+PASS  193  pc=0000032c  JAL       x16 = 00000330  jump -> 00000334 (in ID, 0 lost cycles)
+PASS  194  pc=00000334  AUIPC     x17 = 00000334
+PASS  195  pc=00000338  ADDI      x17 = 00000334  RAW x17 from AUIPC forwarded to ID
+PASS  196  pc=0000033c  BNE       taken -> 00000344 (in ID, 0 lost cycles)  RAW x17 from ADDI forwarded to ID
+PASS  197  pc=00000344  LW        x18 = 12345678
+PASS  198  pc=00000348  ADDI      x19 = 12345679  RAW x18 from LW forwarded to ID
+PASS  199  pc=0000034c  SW        mem[0000100c] <= 12345679  RAW x19 from ADDI forwarded to ID
+PASS  200  pc=00000350  LW        x21 = 12345679
+PASS  201  pc=00000354  LUI       x22 = 12345000
+PASS  202  pc=00000358  ADDI      x22 = 12345679  RAW x22 from LUI forwarded to ID
+PASS  203  pc=0000035c  BEQ       taken -> 00000364 (in ID, 0 lost cycles)  RAW x22 from ADDI forwarded to ID
+PASS  204  pc=00000364  LW        x23 = 12345678
+PASS  205  pc=00000368  SW        mem[00001010] <= 12345678  RAW x23 from LW forwarded to ID
+PASS  206  pc=0000036c  LW        x24 = 12345678
+PASS  207  pc=00000370  BEQ       taken -> 00000378 (in ID, 0 lost cycles)  RAW x24 from LW forwarded to ID
+PASS  208  pc=00000378  ADDI      x5  = 00000000
+PASS  209  pc=0000037c  ADDI      no effect (rd = x0 or NOP)
+PASS  210  pc=00000380  BEQ       taken -> 00000388 (in ID, 0 lost cycles)  RAW x5 (distance 2) from reg file
+PASS  211  pc=00000388  SW        mem[00001014] <= 00001008
+PASS  212  pc=0000038c  LW        x25 = 00001008
+PASS  213  pc=00000390  LW        x26 = 12345678  RAW x25 from LW forwarded to ID
+PASS  214  pc=00000394  LUI       x27 = 12345000
+PASS  215  pc=00000398  ADDI      x27 = 12345678  RAW x27 from LUI forwarded to ID
+PASS  216  pc=0000039c  BEQ       taken -> 000003a4 (in ID, 0 lost cycles)  RAW x27 from ADDI forwarded to ID
+PASS  217  pc=000003a4  ADDI      x28 = 00000001
+PASS  218  pc=000003a8  ADD       x28 = 00000002  RAW x28 from ADDI forwarded to ID
+PASS  219  pc=000003ac  ADD       x28 = 00000004  RAW x28 from ADD forwarded to ID
+PASS  220  pc=000003b0  ADD       x28 = 00000008  RAW x28 from ADD forwarded to ID
+PASS  221  pc=000003b4  ADDI      x29 = 00000008
+PASS  222  pc=000003b8  BEQ       taken -> 000003c0 (in ID, 0 lost cycles)  RAW x29 from ADDI forwarded to ID
+PASS  223  pc=000003c0  SW        mem[0000100c] <= 00000008
+PASS  224  pc=000003c4  LW        x29 = 00000008
+PASS  225  pc=000003c8  ADDI      x29 = 00000000  RAW x29 from LW forwarded to ID
+PASS  226  pc=000003cc  BEQ       taken -> 000003d4 (in ID, 0 lost cycles)  RAW x29 from ADDI forwarded to ID
+PASS  227  pc=000003d4  BEQ       taken -> 000003e0 (in ID, 0 lost cycles)
+PASS  228  pc=000003e0  LW        x26 = 12345678
+PASS  229  pc=000003e4  BEQ       taken -> 000003ec (in ID, 0 lost cycles)  RAW x26 from LW forwarded to ID
+PASS  230  pc=000003ec  JAL       x1  = 000003f0  jump -> 000003f4 (in ID, 0 lost cycles)
+PASS  231  pc=000003f4  SW        mem[00001010] <= 000003f0  RAW x1 from JAL forwarded to ID
+PASS  232  pc=000003f8  LW        x2  = 000003f0
+PASS  233  pc=000003fc  JALR      taken -> 000003f0 (in ID, 0 lost cycles)  RAW x2 from LW forwarded to ID
+PASS  234  pc=000003f0  JAL       taken -> 00000404 (in ID, 0 lost cycles)
+PASS  235  pc=00000404  JAL       taken -> 0000040c (in ID, 0 lost cycles)
+PASS  236  pc=0000040c  LUI       x30 = 0000c000
+PASS  237  pc=00000410  ADDI      x30 = 0000c0de  RAW x30 from LUI forwarded to ID
+PASS  238  pc=00000414  EBREAK    CPU halts
+
+==================== SUMMARY ====================
+instructions checked : 238 of 238 issued in 484 cycles
+RV32I coverage       : 42 / 42 instructions
+RV32M (Bonus 2)      : 8 / 8 instructions
+branches/jumps       : 35 taken, 48 not taken, all resolved in ID with 0 lost cycles (Bonus 4)
+RAW hazards (dist 1) : 77 after ALU, 11 after load, forwarded EX_MEM/memory -> ID
+  used by a branch   : 55, by JALR: 4, as store data: 5
+RAW hazards (dist 2) : 13, read from the register file
+stalls / bubbles     : 0 (one instruction entered ID every 2 cycles)
+errors               : 0
+TEST PASSED
+pipeline_tb.v:775: $finish called at 4850000 (1ps)
