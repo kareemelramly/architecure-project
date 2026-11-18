@@ -16,3 +16,5 @@ November 14, 1:37 PM: Updated Datapath_Board top module.
 Updated the top module for our constraint file to our new pipelined processor. 
 November 14, 2:19 PM: Updated pipeline tb. 
 Added assembly instructions to test 2-bit predictor and hazard detection unit 
+November 18, 4:43 PM :Reviewed and modified Pipeline top module
+Ensured phase detector WORKS WITH BRANCH BONUS 
