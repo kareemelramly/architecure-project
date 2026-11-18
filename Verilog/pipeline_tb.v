@@ -14,6 +14,8 @@
  *                 instruction issued every 2 cycles.
  *              TRACE = 1 prints the pipeline state every cycle (used to
  *              draw the pipeline chart in the implementation guide).
+ *              PROG is a built-in program name (all_instr, hazards,
+ *              nops_halt, demo) or a .hex path (timing, compliance tests).
  *              Prints one PASS / FAIL line. Run from Verilog/ with
  *              sh ../Testing/run_all.sh
  *
@@ -27,7 +29,8 @@
 `default_nettype none
 
 module pipeline_tb #(
-    parameter PROG         = "D:/New folder/architecure-project/MS3_3stage_submission/Testing/programs/all_instr.hex",    parameter ADDR_BITS    = 10,
+    parameter PROG         = "all_instr",  // built-in name or .hex path
+    parameter ADDR_BITS    = 10,
     parameter CHECK_TIMING = 0,
     parameter MAX_CYCLES   = 40000,
     parameter TRACE        = 0       // 1: print one line per cycle

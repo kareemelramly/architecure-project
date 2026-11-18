@@ -29,7 +29,7 @@ def run(src_dir, prog):
     rtl = [os.path.join(src_dir, f) for f in sorted(os.listdir(src_dir))
            if f.endswith(".v") and not f.endswith("_tb.v")
            and f not in ("datapath_board_pipelined.v", "SevenSegHex8.v",
-                         "Debounce.v", "CpuClockGen.v")]
+                         "Debounce.v")]
     timing = "1" if prog.endswith("timing.hex") else "0"
     out = os.path.join(src_dir, "sim.out")
     subprocess.run(["iverilog", "-g2012", "-I", src_dir, "-s", "pipeline_tb",

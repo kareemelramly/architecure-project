@@ -58,11 +58,14 @@ Program pass signature: x31 = 00000000 and x30 = 0000C0DE.
 Build for the FPGA (Nexys A7-100T, Vivado)
 - Add every Verilog/*.v file except *_tb.v, plus defines.vh and const1.xdc.
 - Top module: datapath_board_pipelined.
-- Add the program hex (e.g. Testing/programs/all_instr.hex) to the project
-  as a design source, or set the generic PROGRAM_FILE to its absolute path.
+- Choose the program in datapath_board_pipelined.v, parameter PROGRAM_FILE:
+  "all_instr", "hazards", "nops_halt" or "demo". These four programs are
+  written inside UnifiedMem.v (with the assembly as comments), so no .hex
+  file is needed on the board. A .hex path also works.
 
 Board controls
-- SW15 reset. BTNC = one CPU clock cycle. SW6 free run, SW7 fast free run.
+- SW15 reset. BTNC = one CPU clock cycle (the debounced button is the CPU
+  clock; there is no free-run mode).
 - SW5-SW2 display: 0 PC, 1 instruction in ID, 2 EX result, 3 memory address,
   4 memory data, 5 write-back data, 6 store data, 15 register x[SW12-SW8].
 - SW1-SW0 LEDs: 00 inst[14:0], 10 inst[30:16], 01 pipeline flags.
@@ -84,6 +87,6 @@ Assumptions / limitations
   riscv-tests ma_data is skipped). FENCE.I is not required and not tested.
 - Memory is 1 KB: code from 0x000, data from 0x300 (ADDR_BITS parameter).
 - No traps for illegal instructions. RV32M division is combinational; the
-  CPU clock on the board is at most ~3 MHz.
-- Change SW6/SW7 only while in reset or halted.
+  CPU clock on the board is the BTNC button (one press = one cycle), so
+  all_instr needs 292 presses, hazards 196, nops_halt 34, demo 18.
 - Not yet done: Vivado bitstream build and board run in this version.

@@ -51,5 +51,5 @@ PASS ../Testing/compliance/sub.hex: halted in cycle 872, 313 register writes
 PASS ../Testing/compliance/sw.hex: halted in cycle 996, 343 register writes
 PASS ../Testing/compliance/xor.hex: halted in cycle 932, 353 register writes
 PASS ../Testing/compliance/xori.hex: halted in cycle 354, 130 register writes
-== Board top (step mode, free run, display)
+== Board top (step mode with a bouncing button, display)
 PASS datapath_board_pipelined_tb

@@ -1,9 +1,10 @@
 ## Nexys A7-100T constraints for datapath_board_pipelined (top module)
 ## Every pin below was checked against Digilent's Nexys-A7-100T-Master.xdc
 ## (github.com/Digilent/digilent-xdc) on 11/18/26.
-## SW0-1 ledSel, SW2-5 ssdSel, SW6 runMode, SW7 fastMode, SW8-12 regSel,
-## SW15 reset, BTNC step. The CPU clock is made inside the FPGA (CpuClockGen)
-## and is at most ~3 MHz, so only the 100 MHz board clock is constrained.
+## SW0-1 ledSel, SW2-5 ssdSel, SW8-12 regSel,
+## SW15 reset, BTNC step. The CPU clock is the debounced BTNC (Debounce)
+## and changes only at button speed, so only the 100 MHz board clock is
+## constrained.
 
 ## Clock 100 MHz
 set_property -dict { PACKAGE_PIN E3 IOSTANDARD LVCMOS33 } [get_ports sysClk]
@@ -20,8 +21,6 @@ set_property -dict { PACKAGE_PIN M13 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[0]
 set_property -dict { PACKAGE_PIN R15 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[1]}]
 set_property -dict { PACKAGE_PIN R17 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[2]}]
 set_property -dict { PACKAGE_PIN T18 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[3]}]
-set_property -dict { PACKAGE_PIN U18 IOSTANDARD LVCMOS33 } [get_ports runMode]
-set_property -dict { PACKAGE_PIN R13 IOSTANDARD LVCMOS33 } [get_ports fastMode]
 set_property -dict { PACKAGE_PIN T8  IOSTANDARD LVCMOS18 } [get_ports {regSel[0]}]
 set_property -dict { PACKAGE_PIN U8  IOSTANDARD LVCMOS18 } [get_ports {regSel[1]}]
 set_property -dict { PACKAGE_PIN R16 IOSTANDARD LVCMOS33 } [get_ports {regSel[2]}]

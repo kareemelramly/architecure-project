@@ -7,7 +7,7 @@
 RTL="ALU.v alu_unit.v BranchUnit.v control_unit.v DFlipFlop.v ForwardingUnit.v
      ImmGen.v mux2x1.v N_bit_register.v Nbit_decoder.v PhaseController.v
      pipeline.v PipelineReg.v RegFile.v UnifiedMem.v"
-BOARD="CpuClockGen.v Debounce.v SevenSegHex8.v datapath_board_pipelined.v"
+BOARD="Debounce.v SevenSegHex8.v datapath_board_pipelined.v"
 OUT=/tmp/femtorv32_sim.out
 
 sim() {   # sim <top> <iverilog options...>
@@ -34,5 +34,5 @@ for f in ../Testing/compliance/*.hex; do
       pipeline_tb.v $RTL
 done
 
-echo "== Board top (step mode, free run, display)"
+echo "== Board top (step mode with a bouncing button, display)"
 sim datapath_board_pipelined_tb datapath_board_pipelined_tb.v $RTL $BOARD
