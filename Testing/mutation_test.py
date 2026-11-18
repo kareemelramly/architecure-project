@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
-"""Mutation test: breaks pipeline.v on purpose in several ways and checks that
+"""Mutation test: breaks pipeline.v / ForwardingUnit.v on purpose in several ways and checks that
 the test suite catches every break. Run from Verilog/:
     python3 ../Testing/mutation_test.py
 Needs iverilog. Each mutant must FAIL at least one program."""
 import glob, os, re, subprocess, sys, tempfile
 
-MUTANTS = {
-    "no forwarding (rs1)":   ("assign ID_Rs1Data  = (ID_ForwardA) ? MEM_FwdData : ID_ReadData1;",
-                              "assign ID_Rs1Data  = ID_ReadData1;"),
-    "no forwarding (rs2)":   ("assign ID_Rs2Data  = (ID_ForwardB) ? MEM_FwdData : ID_ReadData2;",
-                              "assign ID_Rs2Data  = ID_ReadData2;"),
-    "no load forwarding":    ("assign MEM_FwdData = (EX_MEM_WbFromMem) ? memPortDataOut : EX_MEM_Result;",
-                              "assign MEM_FwdData = EX_MEM_Result;"),
-    "branch not taken in ID":("assign IF_PcLoad = (isC0 | (isC1 & ID_PcSrc)) & ~haltState;",
+MUTANTS = {   # name: (file, original text, broken text)
+    "no forwarding (rs1)":   ("ForwardingUnit.v",
+                              "assign rs1Data = (forwardA) ? memValue : regData1;",
+                              "assign rs1Data = regData1;"),
+    "no forwarding (rs2)":   ("ForwardingUnit.v",
+                              "assign rs2Data = (forwardB) ? memValue : regData2;",
+                              "assign rs2Data = regData2;"),
+    "no load forwarding":    ("ForwardingUnit.v",
+                              "assign memValue = (exMemIsLoad) ? memReadData : exMemResult;",
+                              "assign memValue = exMemResult;"),
+    "branch not taken in ID":("pipeline.v",
+                              "assign IF_PcLoad = (isC0 | (isC1 & ID_PcSrc)) & ~haltState;",
                               "assign IF_PcLoad = isC0 & ~haltState;"),
-    "RF written in C1":      ("assign WB_RegWriteEn = MEM_WB_RegWrite & isC0;",
+    "RF written in C1":      ("pipeline.v",
+                              "assign WB_RegWriteEn = MEM_WB_RegWrite & isC0;",
                               "assign WB_RegWriteEn = MEM_WB_RegWrite & isC1;"),
-    "EBREAK does not halt":  ("assign ID_HaltSet = isC1 & ID_HaltValid;",
+    "EBREAK does not halt":  ("pipeline.v",
+                              "assign ID_HaltSet = isC1 & ID_HaltValid;",
                               "assign ID_HaltSet = 1'b0;"),
-    "JALR bit 0 kept":       ("{ID_JalrSum[31:1], 1'b0}", "ID_JalrSum"),
-    "MEM_WB in C0":          (".load(isC1),\n        .flush(1'b0),\n        .D(MEM_WB_In),",
+    "JALR bit 0 kept":       ("pipeline.v",
+                              "{ID_JalrSum[31:1], 1'b0}", "ID_JalrSum"),
+    "MEM_WB in C0":          ("pipeline.v",
+                              ".load(isC1),\n        .flush(1'b0),\n        .D(MEM_WB_In),",
                               ".load(isC0),\n        .flush(1'b0),\n        .D(MEM_WB_In),"),
 }
 
@@ -42,12 +50,12 @@ def run(src_dir, prog):
 
 def main():
     caught = 0
-    for name, (old, new) in MUTANTS.items():
+    for name, (target, old, new) in MUTANTS.items():
         with tempfile.TemporaryDirectory() as tmp:
             for f in os.listdir("."):
                 if f.endswith((".v", ".vh")):
                     text = open(f).read()
-                    if f == "pipeline.v":
+                    if f == target:
                         assert old in text, name
                         text = text.replace(old, new)
                     open(os.path.join(tmp, f), "w").write(text)

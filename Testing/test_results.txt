@@ -2,7 +2,7 @@
 PASS ALU_tb: 37152 checks
 PASS UnifiedMem_tb
 == Full self-checking test (42 RV32I + 8 RV32M, hazards, Bonus 4)
-pipeline_tb: ../Testing/programs/full_test.hex
+pipeline_tb: built-in full test (full_test.s)
 PASS    1  pc=00000000  ADDI      x31 = 00000000
 PASS    2  pc=00000004  ADDI      x1  = 00000001
 PASS    3  pc=00000008  ECALL     no effect (rd = x0 or NOP)
@@ -243,7 +243,7 @@ PASS  237  pc=00000410  ADDI      x30 = 0000c0de  RAW x30 from LUI forwarded to 
 PASS  238  pc=00000414  EBREAK    CPU halts
 
 ==================== SUMMARY ====================
-instructions checked : 238 of 238 issued in 484 cycles
+instructions checked : 238 of 238 issued in 483 cycles
 RV32I coverage       : 42 / 42 instructions
 RV32M (Bonus 2)      : 8 / 8 instructions
 branches/jumps       : 35 taken, 48 not taken, all resolved in ID with 0 lost cycles (Bonus 4)
@@ -253,7 +253,7 @@ RAW hazards (dist 2) : 13, read from the register file
 stalls / bubbles     : 0 (one instruction entered ID every 2 cycles)
 errors               : 0
 TEST PASSED
-pipeline_tb.v:775: $finish called at 4850000 (1ps)
+pipeline_tb.v:806: $finish called at 485000 (1ps)
 == Board programs and riscv-tests rv32ui against the reference model
 TEST PASSED  all_instr.hex
 TEST PASSED  hazards.hex

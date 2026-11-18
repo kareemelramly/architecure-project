@@ -1,9 +1,23 @@
-# all_instr.s: one self-checked instance of every RV32I/M operation.
+# all_instr.s: one self-checked instance of every RV32I/M operation
+# (all 42 RV32I instructions including ECALL, FENCE, FENCE.TSO, PAUSE,
+# EBREAK, and the 8 RV32M instructions).
 # x31 = failure count (0 = pass), x30 = 0xC0DE when finished.
     .text
     .globl _start
 _start:
     li   x31, 0
+    # ECALL, FENCE, FENCE.TSO, PAUSE execute as NOPs
+    li   x1, 1
+    ecall
+    addi x1, x1, 1
+    fence
+    addi x1, x1, 1
+    .word 0x8330000f     # fence.tso
+    addi x1, x1, 1
+    .word 0x0100000f     # pause
+    addi x1, x1, 1
+    li   x2, 5
+    bne  x1, x2, fail
     la   x20, data
     li   x1, 12
     li   x2, -5

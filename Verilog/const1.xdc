@@ -1,7 +1,7 @@
 ## Nexys A7-100T constraints for datapath_board_pipelined (top module)
 ## Every pin below was checked against Digilent's Nexys-A7-100T-Master.xdc
 ## (github.com/Digilent/digilent-xdc) on 11/18/26.
-## SW0 ledSel, SW2-3 ssdSel,
+## SW0 ledSel, SW1-3 ssdSel (SW1 = bit 0),
 ## SW15 reset, BTNC step. The CPU clock is the debounced BTNC (Debounce)
 ## and changes only at button speed, so only the 100 MHz board clock is
 ## constrained.
@@ -16,8 +16,9 @@ set_property -dict { PACKAGE_PIN V10 IOSTANDARD LVCMOS33 } [get_ports reset]
 
 ## Switches
 set_property -dict { PACKAGE_PIN J15 IOSTANDARD LVCMOS33 } [get_ports ledSel]
-set_property -dict { PACKAGE_PIN M13 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[0]}]
-set_property -dict { PACKAGE_PIN R15 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[1]}]
+set_property -dict { PACKAGE_PIN L16 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[0]}]
+set_property -dict { PACKAGE_PIN M13 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[1]}]
+set_property -dict { PACKAGE_PIN R15 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[2]}]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN H17 IOSTANDARD LVCMOS33 } [get_ports {leds[0]}]

@@ -6,9 +6,12 @@
  *              against a behavioural reference model on corner values
  *              (0, 1, -1, 0x80000000, 0x7FFFFFFF, ...) and 2000 random pairs,
  *              including RV32M division by zero and -2^31 / -1.
+ *              Finishes in about 750 ns, so Vivado's default 1000 ns run is
+ *              enough; the result is printed in the Tcl Console.
  *
  * Change history:
  *   11/18/26 - created
+ *   11/18/26 - 20 ps per check so it fits Vivado's default run time
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -92,7 +95,7 @@ module ALU_tb;
 
     task check;
         begin
-            #1;
+            #0.02;          // 20 ps per check: all checks fit in 1000 ns
             reference;
             checks = checks + 1;
             if ((result !== expected) || (zero !== (expected == 0))) begin

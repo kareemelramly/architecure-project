@@ -39,6 +39,8 @@
  *   11/18/26 - Debug ports and LED flag bus removed (only PC, instruction,
  *              write-back data and halt leave the CPU); signals renamed
  *              by stage (IF_, ID_, EX_, MEM_, WB_)
+ *   11/18/26 - Board observation outputs for EX result, memory port,
+ *              store data and write-back register
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -53,9 +55,14 @@ module pipeline #(
     input  wire        rst,
 
     // Board observation (read only)
-    output wire [31:0] pcOut,
-    output wire [31:0] instOut,
-    output wire [31:0] wbDataOut,
+    output wire [31:0] pcOut,          // IF: PC
+    output wire [31:0] instOut,        // ID: instruction
+    output wire [31:0] exResultOut,    // EX: result (ALU, PC + 4 or imm)
+    output wire [31:0] memAddrOut,     // memory port address
+    output wire [31:0] memDataOut,     // memory port data out
+    output wire [31:0] storeDataOut,   // MEM: store data
+    output wire [31:0] wbDataOut,      // WB: data written to the reg file
+    output wire [4:0]  wbRdOut,        // WB: destination (0 = no write)
     output wire        halted
 );
 
@@ -100,9 +107,6 @@ module pipeline #(
     wire [31:0] ID_ReadData1;
     wire [31:0] ID_ReadData2;
     wire [31:0] ID_Imm;
-    wire        ID_ForwardA;
-    wire        ID_ForwardB;
-    wire [31:0] MEM_FwdData;
     wire [31:0] ID_Rs1Data;
     wire [31:0] ID_Rs2Data;
     wire        ID_BranchValid;
@@ -288,22 +292,21 @@ module pipeline #(
     );
 
     // ---- Forwarding into ID (used in C1) ----
-    // The instruction before this one is in MEM: its value is the EX
-    // result in EX_MEM, or for a load the memory output of this same C1.
-    // ForwardingUnit is reused unchanged: its "EX" inputs are the ID
-    // source registers and its "MEM_WB" inputs are the EX_MEM ones.
+    // The instruction before this one is in MEM: ForwardingUnit takes its
+    // EX result from EX_MEM, or for a load the memory output of this C1.
     ForwardingUnit forwarding(
-        .exRs1(IF_ID_Inst[19:15]),
-        .exRs2(IF_ID_Inst[24:20]),
-        .memWbRd(EX_MEM_Rd),
-        .memWbRegWrite(EX_MEM_RegWrite),
-        .forwardA(ID_ForwardA),
-        .forwardB(ID_ForwardB)
+        .idRs1(IF_ID_Inst[19:15]),
+        .idRs2(IF_ID_Inst[24:20]),
+        .regData1(ID_ReadData1),
+        .regData2(ID_ReadData2),
+        .exMemRd(EX_MEM_Rd),
+        .exMemRegWrite(EX_MEM_RegWrite),
+        .exMemIsLoad(EX_MEM_WbFromMem),
+        .exMemResult(EX_MEM_Result),
+        .memReadData(memPortDataOut),
+        .rs1Data(ID_Rs1Data),
+        .rs2Data(ID_Rs2Data)
     );
-
-    assign MEM_FwdData = (EX_MEM_WbFromMem) ? memPortDataOut : EX_MEM_Result;
-    assign ID_Rs1Data  = (ID_ForwardA) ? MEM_FwdData : ID_ReadData1;
-    assign ID_Rs2Data  = (ID_ForwardB) ? MEM_FwdData : ID_ReadData2;
 
     // ---- Branch / jump resolution in ID (Bonus 4) ----
     assign ID_BranchValid = ID_Branch & ID_Valid;
@@ -435,10 +438,15 @@ module pipeline #(
     // =========================================================================
     // Board observation
     // =========================================================================
-    assign pcOut     = IF_PC;
-    assign instOut   = IF_ID_Inst;
-    assign wbDataOut = WB_Data;
-    assign halted    = haltState;
+    assign pcOut        = IF_PC;
+    assign instOut      = IF_ID_Inst;
+    assign exResultOut  = EX_Result;
+    assign memAddrOut   = {{(32 - ADDR_BITS){1'b0}}, memPortAddr};
+    assign memDataOut   = memPortDataOut;
+    assign storeDataOut = EX_MEM_StoreData;
+    assign wbDataOut    = WB_Data;
+    assign wbRdOut      = (MEM_WB_RegWrite) ? MEM_WB_Rd : `REG_ZERO;
+    assign halted       = haltState;
 
 endmodule
 

@@ -33,15 +33,27 @@
  *              instructions and the 8 RV32M instructions must have passed.
  *              Prints "TEST PASSED" or "TEST FAILED".
  *
- * Parameters: PROG      program image (.hex, one 32-bit word per line)
+ * Parameters: PROG      "" (default): the full test program built into
+ *                       this file (Testing/programs/full_test.s), so no
+ *                       file path is needed (Vivado runs the simulation
+ *                       from its own folder). Otherwise a .hex image (one
+ *                       32-bit word per line), best as an absolute path.
  *             ADDR_BITS memory size of the pipeline under test
  *             VERBOSE   1: one line per instruction, 0: summary only
  *             COVERAGE  1: require every instruction to be covered
+ *
+ * Vivado: set pipeline_tb as simulation top and click Run Simulation.
+ *         The built-in program finishes in about 500 ns (1 ns clock), so
+ *         the default run time of 1000 ns is enough. Results are printed
+ *         in the Tcl Console (and in simulate.log). With another PROG use
+ *         Run All.
  *
  * Change history:
  *   11/18/26 - Replaces the old pipeline_tb, datapath_board_pipelined_tb
  *              and the ForwardingUnit/PhaseController/PipelineReg unit
  *              testbenches with one system-level self-checking testbench
+ *   11/18/26 - Vivado: program built in (no file path), 1 ns clock so the
+ *              default 1000 ns run is enough
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -49,7 +61,7 @@
 
 module pipeline_tb;
 
-    parameter PROG       = "../Testing/programs/full_test.hex";
+    parameter PROG       = "";          // "" = built-in full test
     parameter ADDR_BITS  = 13;
     parameter VERBOSE    = 1;
     parameter COVERAGE   = 1;
@@ -63,7 +75,12 @@ module pipeline_tb;
     reg         rst;
     wire [31:0] pcOut;
     wire [31:0] instOut;
+    wire [31:0] exResultOut;
+    wire [31:0] memAddrOut;
+    wire [31:0] memDataOut;
+    wire [31:0] storeDataOut;
     wire [31:0] wbDataOut;
+    wire [4:0]  wbRdOut;
     wire        halted;
 
     pipeline #(
@@ -74,15 +91,23 @@ module pipeline_tb;
         .rst(rst),
         .pcOut(pcOut),
         .instOut(instOut),
+        .exResultOut(exResultOut),
+        .memAddrOut(memAddrOut),
+        .memDataOut(memDataOut),
+        .storeDataOut(storeDataOut),
         .wbDataOut(wbDataOut),
+        .wbRdOut(wbRdOut),
         .halted(halted)
     );
 
-    always #5 clk = ~clk;
+    // 1 ns clock period (1 GHz is only a simulation speed; the design has
+    // no delays) so the full test fits in Vivado's default 1000 ns run
+    always #0.5 clk = ~clk;
 
     // =========================================================================
     // Reference model state
     // =========================================================================
+    reg  [31:0] progImg [0:WORDS-1];
     reg  [31:0] refReg [0:31];
     reg  [31:0] refMem [0:WORDS-1];
     reg  [31:0] refPC;
@@ -399,6 +424,7 @@ module pipeline_tb;
     integer     lastIssue;
     integer     covered [0:NINSTR-1];
     integer     hzAluNext, hzLoadNext, hzBranch, hzJalr, hzStore, hzTwo;
+    integer     hzTwoBranch;
     integer     takenCnt, notTakenCnt;
     integer     gapErrors;
     integer     i, missing;
@@ -501,11 +527,11 @@ module pipeline_tb;
                 note   = "";
                 if (dep1) begin
                     if (stUsesRs1 && (stInst[19:15] == prevRd) &&
-                        !dut.ID_ForwardA) begin
+                        !dut.forwarding.forwardA) begin
                         fail("RAW hazard on rs1 not forwarded");
                     end
                     if (stUsesRs2 && (stInst[24:20] == prevRd) &&
-                        !dut.ID_ForwardB) begin
+                        !dut.forwarding.forwardB) begin
                         fail("RAW hazard on rs2 not forwarded");
                     end
                     if (prevIsLoad) hzLoadNext = hzLoadNext + 1;
@@ -520,6 +546,20 @@ module pipeline_tb;
                     $sformat(note, "RAW x%0d from %0s forwarded to ID",
                              prevRd, instName(prevId));
                 end else if (dep2) begin
+                    // the producer was written back in the C0 just before
+                    // this C1: the register file must already hold it
+                    // (a, b = source values in the reference model)
+                    if (stUsesRs1 && (stInst[19:15] == prev2Rd) &&
+                        (dut.ID_ReadData1 !== a)) begin
+                        fail("distance-2 value not yet in the register file");
+                    end
+                    if (stUsesRs2 && (stInst[24:20] == prev2Rd) &&
+                        (dut.ID_ReadData2 !== b)) begin
+                        fail("distance-2 value not yet in the register file");
+                    end
+                    if (stIsBranch && (stId != 6'd2)) begin
+                        hzTwoBranch = hzTwoBranch + 1;
+                    end
                     hzTwo = hzTwo + 1;
                     $sformat(note, "RAW x%0d (distance 2) from reg file",
                              prev2Rd);
@@ -679,10 +719,22 @@ module pipeline_tb;
         for (i = 0; i < 32; i = i + 1) begin
             refReg[i] = 32'd0;
         end
+        // ---- program: built-in image or PROG file ----
         for (i = 0; i < WORDS; i = i + 1) begin
-            refMem[i] = 32'd0;
+            progImg[i] = 32'd0;
         end
-        $readmemh(PROG, refMem);
+        if (PROG == "") begin
+            loadFullTest;
+        end else begin
+            $readmemh(PROG, progImg);
+        end
+        // after UnifiedMem's own initial block (time 0), copy the program
+        // into the pipeline memory and the reference model
+        #0.1;
+        for (i = 0; i < WORDS; i = i + 1) begin
+            dut.memory.mem[i] = progImg[i];
+            refMem[i]         = progImg[i];
+        end
         for (i = 0; i < NINSTR; i = i + 1) begin
             covered[i] = 0;
         end
@@ -692,6 +744,7 @@ module pipeline_tb;
         sHead = 0;       sTail = 0;
         hzAluNext = 0;   hzLoadNext = 0;  hzBranch = 0;
         hzJalr = 0;      hzStore = 0;     hzTwo = 0;
+        hzTwoBranch = 0;
         takenCnt = 0;    notTakenCnt = 0;  gapErrors = 0;
         pHead = 0;
         prevWrites = 1'b0;  prev2Writes = 1'b0;
@@ -699,7 +752,11 @@ module pipeline_tb;
         prevIsLoad = 1'b0;  prevId = 6'd0;
         haltSeen = 1'b0;    haltPC = 32'hx;
 
-        $display("pipeline_tb: %0s", PROG);
+        if (PROG == "") begin
+            $display("pipeline_tb: built-in full test (full_test.s)");
+        end else begin
+            $display("pipeline_tb: %0s", PROG);
+        end
         // reset changes on the falling edge, away from the rising edge
         repeat (2) @(negedge clk);
         rst = 1'b0;
@@ -762,8 +819,8 @@ module pipeline_tb;
                  hzAluNext, hzLoadNext);
         $display("  used by a branch   : %0d, by JALR: %0d, as store data: %0d",
                  hzBranch, hzJalr, hzStore);
-        $display("RAW hazards (dist 2) : %0d, read from the register file",
-                 hzTwo);
+        $display("RAW hazards (dist 2) : %0d, read from the register file (%0d by a branch/JALR in ID)",
+                 hzTwo, hzTwoBranch);
         if (gapErrors == 0) begin
             $display("stalls / bubbles     : 0 (one instruction entered ID every 2 cycles)");
         end else begin
@@ -774,6 +831,277 @@ module pipeline_tb;
         else             $display("TEST FAILED");
         $finish;
     end
+
+    // Built-in program: Testing/programs/full_test.s (code at 0x0000,
+    // data at 0x1000). Regenerate after changing full_test.s.
+    task loadFullTest;
+        begin
+            progImg[0] = 32'h00000f93;        // 0000 li x31, 0x0
+            progImg[1] = 32'h00100093;        // 0004 li x1, 0x1
+            progImg[2] = 32'h00000073;        // 0008 ecall
+            progImg[3] = 32'h00108093;        // 000C addi x1, x1, 0x1
+            progImg[4] = 32'h0ff0000f;        // 0010 fence
+            progImg[5] = 32'h00108093;        // 0014 addi x1, x1, 0x1
+            progImg[6] = 32'h8330000f;        // 0018 fence.tso
+            progImg[7] = 32'h00108093;        // 001C addi x1, x1, 0x1
+            progImg[8] = 32'h0100000f;        // 0020 pause
+            progImg[9] = 32'h00108093;        // 0024 addi x1, x1, 0x1
+            progImg[10] = 32'h00500113;       // 0028 li x2, 0x5
+            progImg[11] = 32'h3c209e63;       // 002C bne x1, x2, 0x408
+            progImg[12] = 32'h00001a17;       // 0030 auipc x20, 0x1
+            progImg[13] = 32'hfd0a0a13;       // 0034 addi x20, x20, -0x30
+            progImg[14] = 32'h00c00093;       // 0038 li x1, 0xc
+            progImg[15] = 32'hffb00113;       // 003C li x2, -0x5
+            progImg[16] = 32'h002081b3;       // 0040 add x3, x1, x2
+            progImg[17] = 32'h00700213;       // 0044 li x4, 0x7
+            progImg[18] = 32'h3c419063;       // 0048 bne x3, x4, 0x408
+            progImg[19] = 32'h402081b3;       // 004C sub x3, x1, x2
+            progImg[20] = 32'h01100213;       // 0050 li x4, 0x11
+            progImg[21] = 32'h3a419a63;       // 0054 bne x3, x4, 0x408
+            progImg[22] = 32'h001091b3;       // 0058 sll x3, x1, x1
+            progImg[23] = 32'h0000c237;       // 005C lui x4, 0xc
+            progImg[24] = 32'h3a419463;       // 0060 bne x3, x4, 0x408
+            progImg[25] = 32'h001121b3;       // 0064 slt x3, x2, x1
+            progImg[26] = 32'h00100213;       // 0068 li x4, 0x1
+            progImg[27] = 32'h38419e63;       // 006C bne x3, x4, 0x408
+            progImg[28] = 32'h001131b3;       // 0070 sltu x3, x2, x1
+            progImg[29] = 32'h38019a63;       // 0074 bnez x3, 0x408
+            progImg[30] = 32'h0020c1b3;       // 0078 xor x3, x1, x2
+            progImg[31] = 32'hff700213;       // 007C li x4, -0x9
+            progImg[32] = 32'h38419463;       // 0080 bne x3, x4, 0x408
+            progImg[33] = 32'h004151b3;       // 0084 srl x3, x2, x4
+            progImg[34] = 32'h1ff00213;       // 0088 li x4, 0x1ff
+            progImg[35] = 32'h36419e63;       // 008C bne x3, x4, 0x408
+            progImg[36] = 32'h401151b3;       // 0090 sra x3, x2, x1
+            progImg[37] = 32'hfff00213;       // 0094 li x4, -0x1
+            progImg[38] = 32'h36419863;       // 0098 bne x3, x4, 0x408
+            progImg[39] = 32'h0020e1b3;       // 009C or x3, x1, x2
+            progImg[40] = 32'hfff00213;       // 00A0 li x4, -0x1
+            progImg[41] = 32'h36419263;       // 00A4 bne x3, x4, 0x408
+            progImg[42] = 32'h0020f1b3;       // 00A8 and x3, x1, x2
+            progImg[43] = 32'h00800213;       // 00AC li x4, 0x8
+            progImg[44] = 32'h34419c63;       // 00B0 bne x3, x4, 0x408
+            progImg[45] = 32'hffe08193;       // 00B4 addi x3, x1, -0x2
+            progImg[46] = 32'h00a00213;       // 00B8 li x4, 0xa
+            progImg[47] = 32'h34419663;       // 00BC bne x3, x4, 0x408
+            progImg[48] = 32'h00012193;       // 00C0 slti x3, x2, 0x0
+            progImg[49] = 32'h00100213;       // 00C4 li x4, 0x1
+            progImg[50] = 32'h34419063;       // 00C8 bne x3, x4, 0x408
+            progImg[51] = 32'h00113193;       // 00CC seqz x3, x2
+            progImg[52] = 32'h32019c63;       // 00D0 bnez x3, 0x408
+            progImg[53] = 32'h0050c193;       // 00D4 xori x3, x1, 0x5
+            progImg[54] = 32'h00900213;       // 00D8 li x4, 0x9
+            progImg[55] = 32'h32419663;       // 00DC bne x3, x4, 0x408
+            progImg[56] = 32'h0030e193;       // 00E0 ori x3, x1, 0x3
+            progImg[57] = 32'h00f00213;       // 00E4 li x4, 0xf
+            progImg[58] = 32'h32419063;       // 00E8 bne x3, x4, 0x408
+            progImg[59] = 32'h0060f193;       // 00EC andi x3, x1, 0x6
+            progImg[60] = 32'h00400213;       // 00F0 li x4, 0x4
+            progImg[61] = 32'h30419a63;       // 00F4 bne x3, x4, 0x408
+            progImg[62] = 32'h00209193;       // 00F8 slli x3, x1, 0x2
+            progImg[63] = 32'h03000213;       // 00FC li x4, 0x30
+            progImg[64] = 32'h30419463;       // 0100 bne x3, x4, 0x408
+            progImg[65] = 32'h0020d193;       // 0104 srli x3, x1, 0x2
+            progImg[66] = 32'h00300213;       // 0108 li x4, 0x3
+            progImg[67] = 32'h2e419e63;       // 010C bne x3, x4, 0x408
+            progImg[68] = 32'h40115193;       // 0110 srai x3, x2, 0x1
+            progImg[69] = 32'hffd00213;       // 0114 li x4, -0x3
+            progImg[70] = 32'h2e419863;       // 0118 bne x3, x4, 0x408
+            progImg[71] = 32'h123451b7;       // 011C lui x3, 0x12345
+            progImg[72] = 32'h12345237;       // 0120 lui x4, 0x12345
+            progImg[73] = 32'h2e419263;       // 0124 bne x3, x4, 0x408
+            progImg[74] = 32'h00000197;       // 0128 auipc x3, 0x0
+            progImg[75] = 32'h004002ef;       // 012C jal x5, 0x130
+            progImg[76] = 32'hff828293;       // 0130 addi x5, x5, -0x8
+            progImg[77] = 32'h2c519a63;       // 0134 bne x3, x5, 0x408
+            progImg[78] = 32'h80f1f337;       // 0138 lui x6, 0x80f1f
+            progImg[79] = 32'h2f330313;       // 013C addi x6, x6, 0x2f3
+            progImg[80] = 32'h006a2023;       // 0140 sw x6, 0x0(x20)
+            progImg[81] = 32'h000a2183;       // 0144 lw x3, 0x0(x20)
+            progImg[82] = 32'h2c619063;       // 0148 bne x3, x6, 0x408
+            progImg[83] = 32'h000a0183;       // 014C lb x3, 0x0(x20)
+            progImg[84] = 32'hff300213;       // 0150 li x4, -0xd
+            progImg[85] = 32'h2a419a63;       // 0154 bne x3, x4, 0x408
+            progImg[86] = 32'h000a4183;       // 0158 lbu x3, 0x0(x20)
+            progImg[87] = 32'h0f300213;       // 015C li x4, 0xf3
+            progImg[88] = 32'h2a419463;       // 0160 bne x3, x4, 0x408
+            progImg[89] = 32'h002a1183;       // 0164 lh x3, 0x2(x20)
+            progImg[90] = 32'hffff8237;       // 0168 lui x4, 0xffff8
+            progImg[91] = 32'h0f120213;       // 016C addi x4, x4, 0xf1
+            progImg[92] = 32'h28419c63;       // 0170 bne x3, x4, 0x408
+            progImg[93] = 32'h002a5183;       // 0174 lhu x3, 0x2(x20)
+            progImg[94] = 32'h00008237;       // 0178 lui x4, 0x8
+            progImg[95] = 32'h0f120213;       // 017C addi x4, x4, 0xf1
+            progImg[96] = 32'h28419463;       // 0180 bne x3, x4, 0x408
+            progImg[97] = 32'h001a0223;       // 0184 sb x1, 0x4(x20)
+            progImg[98] = 32'h002a1323;       // 0188 sh x2, 0x6(x20)
+            progImg[99] = 32'h004a2183;       // 018C lw x3, 0x4(x20)
+            progImg[100] = 32'hfffb0237;      // 0190 lui x4, 0xfffb0
+            progImg[101] = 32'h00c20213;      // 0194 addi x4, x4, 0xc
+            progImg[102] = 32'h26419863;      // 0198 bne x3, x4, 0x408
+            progImg[103] = 32'h00108463;      // 019C beq x1, x1, 0x1a4
+            progImg[104] = 32'h2680006f;      // 01A0 j 0x408
+            progImg[105] = 32'h00209463;      // 01A4 bne x1, x2, 0x1ac
+            progImg[106] = 32'h2600006f;      // 01A8 j 0x408
+            progImg[107] = 32'h00114463;      // 01AC blt x2, x1, 0x1b4
+            progImg[108] = 32'h2580006f;      // 01B0 j 0x408
+            progImg[109] = 32'h0020d463;      // 01B4 bge x1, x2, 0x1bc
+            progImg[110] = 32'h2500006f;      // 01B8 j 0x408
+            progImg[111] = 32'h0020e463;      // 01BC bltu x1, x2, 0x1c4
+            progImg[112] = 32'h2480006f;      // 01C0 j 0x408
+            progImg[113] = 32'h00117463;      // 01C4 bgeu x2, x1, 0x1cc
+            progImg[114] = 32'h2400006f;      // 01C8 j 0x408
+            progImg[115] = 32'h008003ef;      // 01CC jal x7, 0x1d4
+            progImg[116] = 32'h2380006f;      // 01D0 j 0x408
+            progImg[117] = 32'h00000417;      // 01D4 auipc x8, 0x0
+            progImg[118] = 32'h01040413;      // 01D8 addi x8, x8, 0x10
+            progImg[119] = 32'h001404e7;      // 01DC jalr x9, 0x1(x8)
+            progImg[120] = 32'h2280006f;      // 01E0 j 0x408
+            progImg[121] = 32'h00000217;      // 01E4 auipc x4, 0x0
+            progImg[122] = 32'hffc20213;      // 01E8 addi x4, x4, -0x4
+            progImg[123] = 32'h20449e63;      // 01EC bne x9, x4, 0x408
+            progImg[124] = 32'h00700513;      // 01F0 li x10, 0x7
+            progImg[125] = 32'hffd00593;      // 01F4 li x11, -0x3
+            progImg[126] = 32'h02b501b3;      // 01F8 
+            progImg[127] = 32'hfeb00213;      // 01FC li x4, -0x15
+            progImg[128] = 32'h20419463;      // 0200 bne x3, x4, 0x408
+            progImg[129] = 32'h02b511b3;      // 0204 
+            progImg[130] = 32'hfff00213;      // 0208 li x4, -0x1
+            progImg[131] = 32'h1e419e63;      // 020C bne x3, x4, 0x408
+            progImg[132] = 32'h02b531b3;      // 0210 
+            progImg[133] = 32'h00600213;      // 0214 li x4, 0x6
+            progImg[134] = 32'h1e419863;      // 0218 bne x3, x4, 0x408
+            progImg[135] = 32'h02a5a1b3;      // 021C 
+            progImg[136] = 32'hfff00213;      // 0220 li x4, -0x1
+            progImg[137] = 32'h1e419263;      // 0224 bne x3, x4, 0x408
+            progImg[138] = 32'h02b541b3;      // 0228 
+            progImg[139] = 32'hffe00213;      // 022C li x4, -0x2
+            progImg[140] = 32'h1c419c63;      // 0230 bne x3, x4, 0x408
+            progImg[141] = 32'h021551b3;      // 0234 
+            progImg[142] = 32'h1c019863;      // 0238 bnez x3, 0x408
+            progImg[143] = 32'h02b561b3;      // 023C 
+            progImg[144] = 32'h00100213;      // 0240 li x4, 0x1
+            progImg[145] = 32'h1c419263;      // 0244 bne x3, x4, 0x408
+            progImg[146] = 32'h021571b3;      // 0248 
+            progImg[147] = 32'h00700213;      // 024C li x4, 0x7
+            progImg[148] = 32'h1a419c63;      // 0250 bne x3, x4, 0x408
+            progImg[149] = 32'h00500013;      // 0254 li x0, 0x5
+            progImg[150] = 32'h1a001863;      // 0258 bnez x0, 0x408
+            progImg[151] = 32'h00c00093;      // 025C li x1, 0xc
+            progImg[152] = 32'hffb00113;      // 0260 li x2, -0x5
+            progImg[153] = 32'h1a208263;      // 0264 beq x1, x2, 0x408
+            progImg[154] = 32'h1a109063;      // 0268 bne x1, x1, 0x408
+            progImg[155] = 32'h1820ce63;      // 026C blt x1, x2, 0x408
+            progImg[156] = 32'h18115c63;      // 0270 bge x2, x1, 0x408
+            progImg[157] = 32'h18116a63;      // 0274 bltu x2, x1, 0x408
+            progImg[158] = 32'h1820f863;      // 0278 bgeu x1, x2, 0x408
+            progImg[159] = 32'h00000293;      // 027C li x5, 0x0
+            progImg[160] = 32'h00400313;      // 0280 li x6, 0x4
+            progImg[161] = 32'h00128293;      // 0284 addi x5, x5, 0x1
+            progImg[162] = 32'hfe62cee3;      // 0288 blt x5, x6, 0x284
+            progImg[163] = 32'h16629e63;      // 028C bne x5, x6, 0x408
+            progImg[164] = 32'h00001a17;      // 0290 auipc x20, 0x1
+            progImg[165] = 32'hd78a0a13;      // 0294 addi x20, x20, -0x288
+            progImg[166] = 32'h00500093;      // 0298 li x1, 0x5
+            progImg[167] = 32'hffb08113;      // 029C addi x2, x1, -0x5
+            progImg[168] = 32'h00010463;      // 02A0 beqz x2, 0x2a8
+            progImg[169] = 32'h001f8f93;      // 02A4 addi x31, x31, 0x1
+            progImg[170] = 32'h00700193;      // 02A8 li x3, 0x7
+            progImg[171] = 32'h00018463;      // 02AC beqz x3, 0x2b4
+            progImg[172] = 32'h0080006f;      // 02B0 j 0x2b8
+            progImg[173] = 32'h001f8f93;      // 02B4 addi x31, x31, 0x1
+            progImg[174] = 32'h000a2203;      // 02B8 lw x4, 0x0(x20)
+            progImg[175] = 32'h00021463;      // 02BC bnez x4, 0x2c4
+            progImg[176] = 32'h001f8f93;      // 02C0 addi x31, x31, 0x1
+            progImg[177] = 32'h004a2283;      // 02C4 lw x5, 0x4(x20)
+            progImg[178] = 32'h00029463;      // 02C8 bnez x5, 0x2d0
+            progImg[179] = 32'h0080006f;      // 02CC j 0x2d4
+            progImg[180] = 32'h001f8f93;      // 02D0 addi x31, x31, 0x1
+            progImg[181] = 32'h000a2303;      // 02D4 lw x6, 0x0(x20)
+            progImg[182] = 32'h00100393;      // 02D8 li x7, 0x1
+            progImg[183] = 32'h00031463;      // 02DC bnez x6, 0x2e4
+            progImg[184] = 32'h001f8f93;      // 02E0 addi x31, x31, 0x1
+            progImg[185] = 32'h00300413;      // 02E4 li x8, 0x3
+            progImg[186] = 32'h00400493;      // 02E8 li x9, 0x4
+            progImg[187] = 32'h00941463;      // 02EC bne x8, x9, 0x2f4
+            progImg[188] = 32'h001f8f93;      // 02F0 addi x31, x31, 0x1
+            progImg[189] = 32'h00940533;      // 02F4 add x10, x8, x9
+            progImg[190] = 32'h00700593;      // 02F8 li x11, 0x7
+            progImg[191] = 32'h00b50463;      // 02FC beq x10, x11, 0x304
+            progImg[192] = 32'h001f8f93;      // 0300 addi x31, x31, 0x1
+            progImg[193] = 32'h00000617;      // 0304 auipc x12, 0x0
+            progImg[194] = 32'h01060613;      // 0308 addi x12, x12, 0x10
+            progImg[195] = 32'h000606e7;      // 030C jalr x13, x12
+            progImg[196] = 32'h001f8f93;      // 0310 addi x31, x31, 0x1
+            progImg[197] = 32'h00000717;      // 0314 auipc x14, 0x0
+            progImg[198] = 32'h01870713;      // 0318 addi x14, x14, 0x18
+            progImg[199] = 32'h00ea2423;      // 031C sw x14, 0x8(x20)
+            progImg[200] = 32'h008a2783;      // 0320 lw x15, 0x8(x20)
+            progImg[201] = 32'h00078067;      // 0324 jr x15
+            progImg[202] = 32'h001f8f93;      // 0328 addi x31, x31, 0x1
+            progImg[203] = 32'h0080086f;      // 032C jal x16, 0x334
+            progImg[204] = 32'h001f8f93;      // 0330 addi x31, x31, 0x1
+            progImg[205] = 32'h00000897;      // 0334 auipc x17, 0x0
+            progImg[206] = 32'h00088893;      // 0338 mv x17, x17
+            progImg[207] = 32'h01181463;      // 033C bne x16, x17, 0x344
+            progImg[208] = 32'h001f8f93;      // 0340 addi x31, x31, 0x1
+            progImg[209] = 32'h000a2903;      // 0344 lw x18, 0x0(x20)
+            progImg[210] = 32'h00190993;      // 0348 addi x19, x18, 0x1
+            progImg[211] = 32'h013a2223;      // 034C sw x19, 0x4(x20)
+            progImg[212] = 32'h004a2a83;      // 0350 lw x21, 0x4(x20)
+            progImg[213] = 32'h12345b37;      // 0354 lui x22, 0x12345
+            progImg[214] = 32'h679b0b13;      // 0358 addi x22, x22, 0x679
+            progImg[215] = 32'h016a8463;      // 035C beq x21, x22, 0x364
+            progImg[216] = 32'h001f8f93;      // 0360 addi x31, x31, 0x1
+            progImg[217] = 32'h000a2b83;      // 0364 lw x23, 0x0(x20)
+            progImg[218] = 32'h017a2423;      // 0368 sw x23, 0x8(x20)
+            progImg[219] = 32'h008a2c03;      // 036C lw x24, 0x8(x20)
+            progImg[220] = 32'h012c0463;      // 0370 beq x24, x18, 0x378
+            progImg[221] = 32'h001f8f93;      // 0374 addi x31, x31, 0x1
+            progImg[222] = 32'h00000293;      // 0378 li x5, 0x0
+            progImg[223] = 32'h00700013;      // 037C li x0, 0x7
+            progImg[224] = 32'h00500463;      // 0380 beq x0, x5, 0x388
+            progImg[225] = 32'h001f8f93;      // 0384 addi x31, x31, 0x1
+            progImg[226] = 32'h014a2623;      // 0388 sw x20, 0xc(x20)
+            progImg[227] = 32'h00ca2c83;      // 038C lw x25, 0xc(x20)
+            progImg[228] = 32'h000cad03;      // 0390 lw x26, 0x0(x25)
+            progImg[229] = 32'h12345db7;      // 0394 lui x27, 0x12345
+            progImg[230] = 32'h678d8d93;      // 0398 addi x27, x27, 0x678
+            progImg[231] = 32'h01bd0463;      // 039C beq x26, x27, 0x3a4
+            progImg[232] = 32'h001f8f93;      // 03A0 addi x31, x31, 0x1
+            progImg[233] = 32'h00100e13;      // 03A4 li x28, 0x1
+            progImg[234] = 32'h01ce0e33;      // 03A8 add x28, x28, x28
+            progImg[235] = 32'h01ce0e33;      // 03AC add x28, x28, x28
+            progImg[236] = 32'h01ce0e33;      // 03B0 add x28, x28, x28
+            progImg[237] = 32'h00800e93;      // 03B4 li x29, 0x8
+            progImg[238] = 32'h01de0463;      // 03B8 beq x28, x29, 0x3c0
+            progImg[239] = 32'h001f8f93;      // 03BC addi x31, x31, 0x1
+            progImg[240] = 32'h01ca2223;      // 03C0 sw x28, 0x4(x20)
+            progImg[241] = 32'h004a2e83;      // 03C4 lw x29, 0x4(x20)
+            progImg[242] = 32'hff8e8e93;      // 03C8 addi x29, x29, -0x8
+            progImg[243] = 32'h000e8463;      // 03CC beqz x29, 0x3d4
+            progImg[244] = 32'h001f8f93;      // 03D0 addi x31, x31, 0x1
+            progImg[245] = 32'h00000663;      // 03D4 beqz x0, 0x3e0
+            progImg[246] = 32'h000a2023;      // 03D8 sw x0, 0x0(x20)
+            progImg[247] = 32'h001f8f93;      // 03DC addi x31, x31, 0x1
+            progImg[248] = 32'h000a2d03;      // 03E0 lw x26, 0x0(x20)
+            progImg[249] = 32'h01bd0463;      // 03E4 beq x26, x27, 0x3ec
+            progImg[250] = 32'h001f8f93;      // 03E8 addi x31, x31, 0x1
+            progImg[251] = 32'h008000ef;      // 03EC jal 0x3f4
+            progImg[252] = 32'h0140006f;      // 03F0 j 0x404
+            progImg[253] = 32'h001a2423;      // 03F4 sw x1, 0x8(x20)
+            progImg[254] = 32'h008a2103;      // 03F8 lw x2, 0x8(x20)
+            progImg[255] = 32'h00010067;      // 03FC jr x2
+            progImg[256] = 32'h001f8f93;      // 0400 addi x31, x31, 0x1
+            progImg[257] = 32'h0080006f;      // 0404 j 0x40c
+            progImg[258] = 32'h001f8f93;      // 0408 addi x31, x31, 0x1
+            progImg[259] = 32'h0000cf37;      // 040C lui x30, 0xc
+            progImg[260] = 32'h0def0f13;      // 0410 addi x30, x30, 0xde
+            progImg[261] = 32'h00100073;      // 0414 ebreak
+            progImg[262] = 32'h064f8f93;      // 0418 addi x31, x31, 0x64
+            progImg[1026] = 32'h12345678;     // 1008 data
+        end
+    endtask
 
     function integer missingIn(input integer lo, input integer hi);
         integer k;
