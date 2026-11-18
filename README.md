@@ -67,7 +67,7 @@ Board controls
 - SW15 reset. BTNC = one CPU clock cycle (the debounced button is the CPU
   clock; there is no free-run mode).
 - SW5-SW2 display: 0 PC, 1 instruction in ID, 2 EX result, 3 memory address,
-  4 memory data, 5 write-back data, 6 store data, 15 register x[SW12-SW8].
+  4 memory data, 5 write-back data, 6 store data.
 - SW1-SW0 LEDs: 00 inst[14:0], 10 inst[30:16], 01 pipeline flags.
 - LD15 and the decimal points light when EBREAK has halted the CPU.
 

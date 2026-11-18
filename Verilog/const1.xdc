@@ -1,7 +1,7 @@
 ## Nexys A7-100T constraints for datapath_board_pipelined (top module)
 ## Every pin below was checked against Digilent's Nexys-A7-100T-Master.xdc
 ## (github.com/Digilent/digilent-xdc) on 11/18/26.
-## SW0-1 ledSel, SW2-5 ssdSel, SW8-12 regSel,
+## SW0-1 ledSel, SW2-5 ssdSel,
 ## SW15 reset, BTNC step. The CPU clock is the debounced BTNC (Debounce)
 ## and changes only at button speed, so only the 100 MHz board clock is
 ## constrained.
@@ -21,11 +21,6 @@ set_property -dict { PACKAGE_PIN M13 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[0]
 set_property -dict { PACKAGE_PIN R15 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[1]}]
 set_property -dict { PACKAGE_PIN R17 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[2]}]
 set_property -dict { PACKAGE_PIN T18 IOSTANDARD LVCMOS33 } [get_ports {ssdSel[3]}]
-set_property -dict { PACKAGE_PIN T8  IOSTANDARD LVCMOS18 } [get_ports {regSel[0]}]
-set_property -dict { PACKAGE_PIN U8  IOSTANDARD LVCMOS18 } [get_ports {regSel[1]}]
-set_property -dict { PACKAGE_PIN R16 IOSTANDARD LVCMOS33 } [get_ports {regSel[2]}]
-set_property -dict { PACKAGE_PIN T13 IOSTANDARD LVCMOS33 } [get_ports {regSel[3]}]
-set_property -dict { PACKAGE_PIN H6  IOSTANDARD LVCMOS33 } [get_ports {regSel[4]}]
 
 ## LEDs
 set_property -dict { PACKAGE_PIN H17 IOSTANDARD LVCMOS33 } [get_ports {leds[0]}]

@@ -9,8 +9,7 @@
  *              the 32-bit
  *              value chosen by SW5..SW2 (ssdSel):
  *                0 PC, 1 instruction in ID, 2 EX result, 3 memory address,
- *                4 memory data out, 5 write-back data, 6 store data,
- *                15 register x[SW12..SW8]
+ *                4 memory data out, 5 write-back data, 6 store data
  *              LEDs show the 16-bit value chosen by SW1..SW0 (ledSel):
  *                00 instruction[14:0], 10 instruction[30:16], 01 flags
  *              LD15 and the decimal points light when EBREAK halted the CPU.
@@ -25,6 +24,8 @@
  *   11/18/26 - 3-stage pipeline, input synchronizers, guideline clean-up;
  *              program selected by name (built into UnifiedMem)
  *   11/18/26 - step mode only: CpuClockGen and SW6/SW7 removed
+ *   11/18/26 - register viewer (regSel, SW12..SW8) removed with the
+ *              register file debug port
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -38,7 +39,6 @@ module datapath_board_pipelined #(
     input  wire        stepBtn,
     input  wire [1:0]  ledSel,
     input  wire [3:0]  ssdSel,
-    input  wire [4:0]  regSel,
     output wire [15:0] leds,
     output wire [7:0]  Anode,
     output wire [6:0]  LED_out,
@@ -49,7 +49,6 @@ module datapath_board_pipelined #(
     wire        rst;
     wire        cpuClk;
 
-    wire [31:0] dbgRegData;
     wire [31:0] dbgPC;
     wire [31:0] dbgInst;
     wire [31:0] dbgAluResult;
@@ -92,8 +91,6 @@ module datapath_board_pipelined #(
     ) cpu(
         .clk(cpuClk),
         .rst(rst),
-        .dbgRegSel(regSel),
-        .dbgRegData(dbgRegData),
         .dbgPC(dbgPC),
         .dbgInst(dbgInst),
         .dbgAluResult(dbgAluResult),
@@ -115,7 +112,6 @@ module datapath_board_pipelined #(
             4'd4:    ssdView = dbgMemOut;
             4'd5:    ssdView = dbgWbData;
             4'd6:    ssdView = dbgStoreData;
-            4'd15:   ssdView = dbgRegData;
             default: ssdView = 32'd0;
         endcase
     end

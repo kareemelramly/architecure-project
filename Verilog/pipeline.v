@@ -43,8 +43,6 @@ module pipeline #(
     input  wire        rst,
 
     // Debug / board observation ports (read only, no effect on the CPU)
-    input  wire [4:0]  dbgRegSel,
-    output wire [31:0] dbgRegData,
     output wire [31:0] dbgPC,
     output wire [31:0] dbgInst,
     output wire [31:0] dbgAluResult,
@@ -272,9 +270,7 @@ module pipeline #(
         .writereg(MEM_WB_Rd),
         .writedata(regWriteData),
         .readdata1(readData1),
-        .readdata2(readData2),
-        .dbgReadReg(dbgRegSel),
-        .dbgReadData(dbgRegData)
+        .readdata2(readData2)
     );
 
     ImmGen immGenerator(
