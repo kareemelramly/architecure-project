@@ -131,7 +131,7 @@ module datapath_board_pipelined #(
 
     assign leds = {dbgHalt, ledView};
 
-    SevenSegHex8 display(
+    SevenSegDecimal8 display(
         .clk(sysClk),
         .rst(rst),
         .dpOn(dbgHalt),

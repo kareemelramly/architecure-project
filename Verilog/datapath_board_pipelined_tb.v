@@ -84,6 +84,45 @@ module datapath_board_pipelined_tb;
         end
     endtask
 
+
+    // Read the eight displayed decimal digits by watching the anodes and
+    // segments for one full refresh round (digit 0 = ones)
+    reg [31:0] shown;
+    function [3:0] segToDigit(input [6:0] s);
+        case (s)
+            7'b0000001: segToDigit = 4'd0;
+            7'b1001111: segToDigit = 4'd1;
+            7'b0010010: segToDigit = 4'd2;
+            7'b0000110: segToDigit = 4'd3;
+            7'b1001100: segToDigit = 4'd4;
+            7'b0100100: segToDigit = 4'd5;
+            7'b0100000: segToDigit = 4'd6;
+            7'b0001111: segToDigit = 4'd7;
+            7'b0000000: segToDigit = 4'd8;
+            7'b0000100: segToDigit = 4'd9;
+            default:    segToDigit = 4'hF;
+        endcase
+    endfunction
+
+    task checkDecimal(input [31:0] bcdExpected, input [8*24-1:0] msg);
+        integer k;
+        begin
+            repeat (200) @(posedge sysClk);       // converter settles
+            shown = 32'd0;
+            for (k = 0; k < 8; k = k + 1) begin
+                wait (Anode == ~(8'd1 << k));
+                #1;
+                shown[k*4 +: 4] = segToDigit(LED_out);
+                wait (Anode != ~(8'd1 << k));
+            end
+            if (shown !== bcdExpected) begin
+                errors = errors + 1;
+                $display("FAIL %0s: digits %h expected %h",
+                         msg, shown, bcdExpected);
+            end
+        end
+    endtask
+
     // Exactly one active-low anode: anodeOn is one-hot
     assign anodeOn = ~Anode;
 
@@ -130,6 +169,7 @@ module datapath_board_pipelined_tb;
         ssdSel = 4'd15;
         regSel = 5'd30;
         checkView(32'h0000C0DE, "x30 on display");
+        checkDecimal(32'h00049374, "x30 shows 49374");   // 0xC0DE = 49374
         regSel = 5'd31;
         checkView(32'h00000000, "x31 on display");
 
