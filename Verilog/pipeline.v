@@ -1,7 +1,7 @@
 /*******************************************************************************
  * Module: pipeline.v
  * Project: femtoRV32
- * Author: Kareem Elramly, Mohamed AboElfotouh
+ * Author: Kareem Elramly, Mohamed AboElfotouh, Moustafa Fayed
  * Description: Pipelined RV32I (+ RV32M) processor with one single-ported
  *              memory for instructions and data. One instruction is issued
  *              every 2 cycles (CPI = 2). Each instruction takes 6 cycles in
