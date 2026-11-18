@@ -2,13 +2,15 @@
  * Module: alu_unit.v
  * Project: femtoRV32
  * Author: Kareem Elramly, Moustafa Fayed (GammaZep45), Mohamed AboElfotouh
- * Description: ALU Control Decoder for R-type, I-type, M-extension, and branches.
+ * Description: ALU Control Decoder for R-type, I-type, M-extension and
+ *              branches.
  *
  * Change history:
  *   10/26/26 - Initial ALU decoder
  *   10/28/26 - Added shift, comparison, and I-type decoding
  *   10/30/26 - Merged RV32M opcode checking
  *   11/01/26 - Cleaned up redundant decoder cases
+ *   11/18/26 - Lines wrapped to 80 characters (coding guidelines)
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -53,12 +55,14 @@ module alu_unit(
                     endcase
                 end else begin
                     case (funct3)
-                        3'b000:  aluSelection = (inst[30]) ? `ALU_SUB : `ALU_ADD;
+                        3'b000:  aluSelection = (inst[30]) ? `ALU_SUB
+                                                           : `ALU_ADD;
                         3'b001:  aluSelection = `ALU_SLL;
                         3'b010:  aluSelection = `ALU_SLT;
                         3'b011:  aluSelection = `ALU_SLTU;
                         3'b100:  aluSelection = `ALU_XOR;
-                        3'b101:  aluSelection = (inst[30]) ? `ALU_SRA : `ALU_SRL;
+                        3'b101:  aluSelection = (inst[30]) ? `ALU_SRA
+                                                           : `ALU_SRL;
                         3'b110:  aluSelection = `ALU_OR;
                         3'b111:  aluSelection = `ALU_AND;
                         default: aluSelection = `ALU_ADD;

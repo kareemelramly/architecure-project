@@ -111,9 +111,12 @@ b6: # JAL / JALR link values
     jal  x7, b7
     j    fail
 b7: la   x8, b8
-    jalr x9, 0(x8)
+    jalr x9, 1(x8)       # target b8 + 1: JALR must clear bit 0
+ret9:
     j    fail
-b8: # RV32M
+b8: la   x4, ret9        # link value = address after the jalr
+    bne  x9, x4, fail
+    # RV32M
     li   x10, 7
     li   x11, -3
     mul  x3, x10, x11

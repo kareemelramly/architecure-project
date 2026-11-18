@@ -57,7 +57,7 @@ module RegFile #(
     assign readdata1 = (readreg1 == 5'd0) ? {N{1'b0}} : d_reg[readreg1];
     assign readdata2 = (readreg2 == 5'd0) ? {N{1'b0}} : d_reg[readreg2];
 
-    // Debug-only third read port (board register viewer, never used by the CPU)
+    // Debug-only third read port (board register viewer, not used by the CPU)
     assign dbgReadData = (dbgReadReg == 5'd0) ? {N{1'b0}} : d_reg[dbgReadReg];
 
 endmodule

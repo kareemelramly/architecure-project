@@ -1,8 +1,0 @@
-PASS ../Testing/programs/all_instr.hex (BP=1): 360 cycles
-PASS ../Testing/programs/hazards.hex (BP=1): 170 cycles
-PASS ../Testing/programs/predictor.hex (BP=1): 774 cycles
-PASS ../Testing/programs/nops_halt.hex (BP=1): 38 cycles
-PASS ../Testing/programs/all_instr.hex (BP=0): 360 cycles
-PASS ../Testing/programs/hazards.hex (BP=0): 170 cycles
-PASS ../Testing/programs/predictor.hex (BP=0): 848 cycles
-PASS ../Testing/programs/nops_halt.hex (BP=0): 38 cycles

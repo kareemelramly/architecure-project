@@ -2,81 +2,185 @@
  * Module: datapath_board_pipelined.v
  * Project: femtoRV32
  * Author: Mostafa Fayed, Kareem Elramly
- * Description: FPGA wrapper (Nexys A7-100T) for the 5-stage pipelined femtoRV32.
- *              BTNC steps one CPU clock cycle (runMode = 0) or SW-selected free run.
- *              8-digit display shows a 32-bit view chosen by ssdSel:
- *              0 PC, 1 next PC, 2 instruction in ID, 3 ALU result, 4 memory address,
- *              5 memory data out, 6 write-back data, 7 store data, 15 x[regSel]
- *              LEDs show a 16-bit view chosen by ledSel (LD15 is always the halt flag):
- *              00 inst[14:0], 10 inst[30:16], 01 control flags, 11 pipeline flags
- *              Decimal points and LD15 light when the processor has halted (EBREAK).
+ * Description: FPGA top level (Nexys A7-100T) for the 3-stage pipelined
+ *              femtoRV32.
+ *              SW15 = reset, BTNC = one CPU clock cycle (SW6 = 0) or free run
+ *              (SW6 = 1, SW7 = fast). The 8-digit display shows the 32-bit
+ *              value chosen by SW5..SW2 (ssdSel):
+ *                0 PC, 1 instruction in ID, 2 EX result, 3 memory address,
+ *                4 memory data out, 5 write-back data, 6 store data,
+ *                15 register x[SW12..SW8]
+ *              LEDs show the 16-bit value chosen by SW1..SW0 (ledSel):
+ *                00 instruction[14:0], 10 instruction[30:16], 01 flags
+ *              LD15 and the decimal points light when EBREAK halted the CPU.
+ *              PROGRAM_FILE picks the built-in program in UnifiedMem.v.
+ *              The reset switch and the mode switches are synchronised to
+ *              sysClk with two flip-flops (brute-force synchronizer).
  *
  * Change history:
  *   11/16/26 - rewritten around pipeline.v for MS3
+ *   11/18/26 - 3-stage pipeline, input synchronizers, guideline clean-up;
+ *              program selected by name (built into UnifiedMem)
  ******************************************************************************/
 
 `timescale 1ns / 1ps
 `default_nettype none
 
-module datapath_board_pipelined #(parameter BP_ENABLE    = 1,
-                                  parameter PROGRAM_FILE = "")(
+module datapath_board_pipelined #(
+    parameter PROGRAM_FILE = "all_instr"  // all_instr, hazards, nops_halt, demo
+)(
     input  wire        sysClk,
-    input  wire        stepBtn,
     input  wire        reset,
+    input  wire        stepBtn,
     input  wire        runMode,
     input  wire        fastMode,
     input  wire [1:0]  ledSel,
     input  wire [3:0]  ssdSel,
     input  wire [4:0]  regSel,
-    output reg  [15:0] leds,
+    output wire [15:0] leds,
     output wire [7:0]  Anode,
     output wire [6:0]  LED_out,
     output wire        dp
 );
-    wire stepPulse, cpuClk;
-    Debounce deb(.clk(sysClk), .in(stepBtn), .pulse(stepPulse));
-    CpuClockGen cg(.sysClk(sysClk), .stepPulse(stepPulse), .runMode(runMode),
-                   .fastMode(fastMode), .cpuClk(cpuClk));
 
-    wire [31:0] dbgRegData, dbgPC, dbgNextPC, dbgInst, dbgAluResult,
-                dbgMemAddr, dbgMemOut, dbgWbData, dbgStoreData;
-    wire [15:0] dbgCtrlFlags, dbgPipeFlags;
+    wire        rstMeta;
+    wire        rst;
+    wire        runMeta;
+    wire        runSync;
+    wire        fastMeta;
+    wire        fastSync;
+    wire        stepPulse;
+    wire        cpuClk;
+
+    wire [31:0] dbgRegData;
+    wire [31:0] dbgPC;
+    wire [31:0] dbgInst;
+    wire [31:0] dbgAluResult;
+    wire [31:0] dbgMemAddr;
+    wire [31:0] dbgMemOut;
+    wire [31:0] dbgWbData;
+    wire [31:0] dbgStoreData;
+    wire [15:0] dbgFlags;
     wire        dbgHalt;
 
-    pipeline #(.BP_ENABLE(BP_ENABLE), .PROGRAM_FILE(PROGRAM_FILE)) cpu(
-        .clk(cpuClk), .reset(reset), .dbgRegSel(regSel),
-        .dbgRegData(dbgRegData), .dbgPC(dbgPC), .dbgNextPC(dbgNextPC),
-        .dbgInst(dbgInst), .dbgAluResult(dbgAluResult),
-        .dbgMemAddr(dbgMemAddr), .dbgMemOut(dbgMemOut),
-        .dbgWbData(dbgWbData), .dbgStoreData(dbgStoreData),
-        .dbgCtrlFlags(dbgCtrlFlags), .dbgPipeFlags(dbgPipeFlags),
-        .dbgHalt(dbgHalt));
+    reg  [31:0] ssdView;
+    reg  [14:0] ledView;
 
-    reg [31:0] view;
-    always @(*) begin
+    // ---------------- Input synchronizers (2 flip-flops each) ----------------
+    DFlipFlop rstSync0(
+        .clk(sysClk),
+        .rst(1'b0),
+        .D(reset),
+        .Q(rstMeta)
+    );
+
+    DFlipFlop rstSync1(
+        .clk(sysClk),
+        .rst(1'b0),
+        .D(rstMeta),
+        .Q(rst)
+    );
+
+    DFlipFlop runSync0(
+        .clk(sysClk),
+        .rst(rst),
+        .D(runMode),
+        .Q(runMeta)
+    );
+
+    DFlipFlop runSync1(
+        .clk(sysClk),
+        .rst(rst),
+        .D(runMeta),
+        .Q(runSync)
+    );
+
+    DFlipFlop fastSync0(
+        .clk(sysClk),
+        .rst(rst),
+        .D(fastMode),
+        .Q(fastMeta)
+    );
+
+    DFlipFlop fastSync1(
+        .clk(sysClk),
+        .rst(rst),
+        .D(fastMeta),
+        .Q(fastSync)
+    );
+
+    // ---------------- CPU clock ----------------
+    Debounce stepDebounce(
+        .clk(sysClk),
+        .rst(rst),
+        .in(stepBtn),
+        .pulse(stepPulse)
+    );
+
+    CpuClockGen clockGen(
+        .sysClk(sysClk),
+        .rst(rst),
+        .stepPulse(stepPulse),
+        .runMode(runSync),
+        .fastMode(fastSync),
+        .cpuClk(cpuClk)
+    );
+
+    // ---------------- CPU ----------------
+    pipeline #(
+        .PROGRAM_FILE(PROGRAM_FILE)
+    ) cpu(
+        .clk(cpuClk),
+        .rst(rst),
+        .dbgRegSel(regSel),
+        .dbgRegData(dbgRegData),
+        .dbgPC(dbgPC),
+        .dbgInst(dbgInst),
+        .dbgAluResult(dbgAluResult),
+        .dbgMemAddr(dbgMemAddr),
+        .dbgMemOut(dbgMemOut),
+        .dbgWbData(dbgWbData),
+        .dbgStoreData(dbgStoreData),
+        .dbgFlags(dbgFlags),
+        .dbgHalt(dbgHalt)
+    );
+
+    // ---------------- Display / LED views ----------------
+    always @* begin
         case (ssdSel)
-            4'd0:    view = dbgPC;
-            4'd1:    view = dbgNextPC;
-            4'd2:    view = dbgInst;
-            4'd3:    view = dbgAluResult;
-            4'd4:    view = dbgMemAddr;
-            4'd5:    view = dbgMemOut;
-            4'd6:    view = dbgWbData;
-            4'd7:    view = dbgStoreData;
-            4'd15:   view = dbgRegData;
-            default: view = 32'd0;
+            4'd0:    ssdView = dbgPC;
+            4'd1:    ssdView = dbgInst;
+            4'd2:    ssdView = dbgAluResult;
+            4'd3:    ssdView = dbgMemAddr;
+            4'd4:    ssdView = dbgMemOut;
+            4'd5:    ssdView = dbgWbData;
+            4'd6:    ssdView = dbgStoreData;
+            4'd15:   ssdView = dbgRegData;
+            default: ssdView = 32'd0;
         endcase
-        case (ledSel)
-            2'b00:   leds = dbgInst[15:0];
-            2'b10:   leds = dbgInst[31:16];
-            2'b01:   leds = dbgCtrlFlags;
-            default: leds = dbgPipeFlags;
-        endcase
-        leds[15] = dbgHalt;          // LD15 = halted, in every view
     end
 
-    SevenSegHex8 ssd(.clk(sysClk), .value(view), .dpOn(dbgHalt),
-                     .Anode(Anode), .LED_out(LED_out), .dp(dp));
+    always @* begin
+        case (ledSel)
+            2'b00:   ledView = dbgInst[14:0];
+            2'b10:   ledView = dbgInst[30:16];
+            2'b01:   ledView = dbgFlags[14:0];
+            default: ledView = 15'd0;
+        endcase
+    end
+
+    assign leds = {dbgHalt, ledView};
+
+    SevenSegHex8 display(
+        .clk(sysClk),
+        .rst(rst),
+        .dpOn(dbgHalt),
+        .value(ssdView),
+        .Anode(Anode),
+        .LED_out(LED_out),
+        .dp(dp)
+    );
+
 endmodule
 
 `default_nettype wire

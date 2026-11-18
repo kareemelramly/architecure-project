@@ -1,5 +1,6 @@
-# hazards.s: ALU and load results consumed one slot later by a branch, JALR,
-# ALU instruction or store; x0 writes never forwarded.
+# hazards.s: ALU and load results consumed by the very next instruction
+# (branch, JALR, ALU, store data, load address), wrong-path flushes after
+# taken branches/jumps, and x0 writes never forwarded.
 # x31 = failure count (0 = pass), x30 = 0xC0DE when finished.
     .text
     .globl _start
@@ -78,11 +79,49 @@ h13: # a discarded write to x0 must not feed the branch
     addi x0, x0, 7
     beq  x0, x5, h14
     addi x31, x31, 1
-h14:
+h14: # load result used as the address of the next load (pointer chase)
+    sw   x20, 12(x20)
+    lw   x25, 12(x20)
+    lw   x26, 0(x25)
+    li   x27, 0x12345678
+    beq  x26, x27, h15
+    addi x31, x31, 1
+h15: # back-to-back dependent ALU chain (each uses the one just before)
+    addi x28, x0, 1
+    add  x28, x28, x28
+    add  x28, x28, x28
+    add  x28, x28, x28
+    li   x29, 8
+    beq  x28, x29, h16
+    addi x31, x31, 1
+h16: # store then load of the same address back to back
+    sw   x28, 4(x20)
+    lw   x29, 4(x20)
+    addi x29, x29, -8
+    beq  x29, x0, h17
+    addi x31, x31, 1
+h17: # taken branch: the wrong-path store and add must be flushed
+    beq  x0, x0, h18
+    sw   x0, 0(x20)
+    addi x31, x31, 1
+h18:
+    lw   x26, 0(x20)
+    beq  x26, x27, h19
+    addi x31, x31, 1
+h19: # JAL then JALR straight after a load of the return address
+    jal  x1, h20
+    j    h21
+h20:
+    sw   x1, 8(x20)
+    lw   x2, 8(x20)
+    jalr x0, 0(x2)
+    addi x31, x31, 1
+h21:
     li   x30, 0xC0DE
     ebreak
     .data
 data:
     .word 0x12345678
+    .word 0
     .word 0
     .word 0

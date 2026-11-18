@@ -8,6 +8,7 @@
  *   10/26/26 - Created initial definitions
  *   10/28/26 - Added branch, memory, ALU, and M-extension definitions
  *   10/30/26 - Merged definitions for full RV32I and RV32M
+ *   11/18/26 - Added pipeline, phase and memory-size constants
  ******************************************************************************/
 
 `ifndef DEFINES_VH
@@ -77,5 +78,12 @@
 `define MEM_SB        3'b000
 `define MEM_SH        3'b001
 `define MEM_SW        3'b010
+
+// Pipeline / memory constants
+`define PC_STEP       32'd4      // bytes per instruction
+`define REG_ZERO      5'd0       // x0, never written or forwarded
+`define MEM_ADDR_BITS 10         // unified memory = 2^10 = 1 KB
+`define PHASE_C0      1'b0       // C0: IF, EX, WB
+`define PHASE_C1      1'b1       // C1: ID, MEM
 
 `endif // DEFINES_VH

@@ -1,6 +1,9 @@
-## Nexys A7-100T constraints for datapath_board_pipelined
-## Pins taken from the Digilent Nexys A7 master XDC as recalled; verify against
-## the official file before programming (see MS3 notes).
+## Nexys A7-100T constraints for datapath_board_pipelined (top module)
+## Every pin below was checked against Digilent's Nexys-A7-100T-Master.xdc
+## (github.com/Digilent/digilent-xdc) on 11/18/26.
+## SW0-1 ledSel, SW2-5 ssdSel, SW6 runMode, SW7 fastMode, SW8-12 regSel,
+## SW15 reset, BTNC step. The CPU clock is made inside the FPGA (CpuClockGen)
+## and is at most ~3 MHz, so only the 100 MHz board clock is constrained.
 
 ## Clock 100 MHz
 set_property -dict { PACKAGE_PIN E3 IOSTANDARD LVCMOS33 } [get_ports sysClk]

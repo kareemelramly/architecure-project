@@ -1,40 +1,65 @@
-# Mutation test for the 5-stage pipeline. Run it on a COPY of Verilog/ (it edits files, then restores them).
-# Usage: cp -r Verilog /tmp/mut && python3 Testing/mutation_test.py /tmp/mut
-import subprocess, shutil, os, sys
-os.chdir(sys.argv[1] if len(sys.argv) > 1 else '.')
-P, H = 'pipeline.v', 'HazardUnit.v'
-M = [
- (P,"EX forward rs1 from EX_MEM off","(forwardA == 2'b10) ? EX_MEM_Result :","1'b0 ? EX_MEM_Result :"),
- (P,"EX forward rs1 from MEM_WB off","(forwardA == 2'b01) ? regWriteData  :","1'b0 ? regWriteData  :"),
- (P,"EX forward rs2 from EX_MEM off","(forwardB == 2'b10) ? EX_MEM_Result :","1'b0 ? EX_MEM_Result :"),
- (P,"EX forward rs2 from MEM_WB off","(forwardB == 2'b01) ? regWriteData  :","1'b0 ? regWriteData  :"),
- (P,"ID forward rs1 from EX_MEM off","(idForwardA == 2'b10) ? EX_MEM_Result :","1'b0 ? EX_MEM_Result :"),
- (P,"ID forward rs2 from EX_MEM off","(idForwardB == 2'b10) ? EX_MEM_Result :","1'b0 ? EX_MEM_Result :"),
- (P,"ID forward rs1 from MEM_WB off","(idForwardA == 2'b01) ? regWriteData  : readData1","readData1"),
- (P,"ID forward also forwards loads","assign exMemFwdEn = EX_MEM_RegWrite & ~EX_MEM_WbFromMem;","assign exMemFwdEn = EX_MEM_RegWrite;"),
- (H,"no load-use stall","assign loadUseStall = idExMemRead && matchEx;","assign loadUseStall = 1'b0;"),
- (H,"no branch stall","assign branchStall  = readsInId &&","assign branchStall  = 1'b0 && readsInId &&"),
- (P,"IF_ID not flushed on redirect","assign ifIdFlush = advance & (redirect | haltNow);","assign ifIdFlush = advance & haltNow;"),
- (P,"halt ignores stall","assign haltNow = haltLatch | (idHalt & ~stall);","assign haltNow = haltLatch | idHalt;"),
- (P,"JALR target bit 0 kept","((idRs1Val + immGenOut) & ~32'd1)","(idRs1Val + immGenOut)"),
- (P,"RegFile writes at end of C1","assign regWriteEn = MEM_WB_RegWrite & isFetch;","assign regWriteEn = MEM_WB_RegWrite & advance;"),
- (P,"PC ignores stall","assign pcLoad = advance & (redirect | (~stall & ~haltNow));","assign pcLoad = advance & (redirect | ~haltNow);"),
- (P,"predictor updated with wrong PC",".updatePC(IF_ID_PC)",".updatePC(pcValue)"),
- (P,"redirect compared with PC+4","(idActualNextPC != IF_ID_PredNextPC)","(idActualNextPC != IF_ID_PC + 32'd4)"),
- (P,"store data not forwarded","exResult, fwdRs2, ID_EX_Inst[14:12]","exResult, ID_EX_RegR2, ID_EX_Inst[14:12]"),
- (P,"load data replaced by address","assign regWriteData = (MEM_WB_WbFromMem) ? MEM_WB_MemOut : MEM_WB_Result;","assign regWriteData = MEM_WB_Result;"),
-]
-for f in (P, H): shutil.copy(f, '/tmp/'+f+'.orig')
-srcs=[f for f in os.listdir('.') if f.endswith('.v') and '_tb' not in f and 'datapath_board' not in f and not f.startswith(('Four_','Nbit_mux','Nbit_shift'))]
-try:
-  for f,name,a,b in M:
-    s=open(f).read(); assert s.count(a)==1,name
-    open(f,'w').write(s.replace(a,b))
-    subprocess.run(['iverilog','-g2012','-s','pipeline_tb','-o','/tmp/mm.out','pipeline_tb.v']+srcs,capture_output=True,text=True)
-    try: o=subprocess.run(['vvp','/tmp/mm.out','+stopfail'],capture_output=True,text=True,timeout=120).stdout
-    except subprocess.TimeoutExpired: o='__TIMEOUT__'
-    det = 'ALL ' not in o or '[FAIL]' in o or '__TIMEOUT__' in o
-    print('%-36s %s'%(name,'DETECTED' if det else 'SURVIVED'),flush=True)
-    shutil.copy('/tmp/'+f+'.orig',f)
-finally:
-  for f in (P,H): shutil.copy('/tmp/'+f+'.orig',f)
+#!/usr/bin/env python3
+"""Mutation test: breaks pipeline.v on purpose in several ways and checks that
+the test suite catches every break. Run from Verilog/:
+    python3 ../Testing/mutation_test.py
+Needs iverilog. Each mutant must FAIL at least one program."""
+import glob, os, re, subprocess, sys, tempfile
+
+MUTANTS = {
+    "no forwarding (rs1)":      ("assign fwdRs1 = (forwardA) ? regWriteData : ID_EX_RegR1;",
+                                 "assign fwdRs1 = ID_EX_RegR1;"),
+    "no forwarding (rs2)":      ("assign fwdRs2 = (forwardB) ? regWriteData : ID_EX_RegR2;",
+                                 "assign fwdRs2 = ID_EX_RegR2;"),
+    "no wrong-path flush":      ("assign ifIdFlush = isC0 & (pcSrc | haltLatch);",
+                                 "assign ifIdFlush = isC0 & haltLatch;"),
+    "RF written in C1":         ("assign regWriteEn = MEM_WB_RegWrite & isC0;",
+                                 "assign regWriteEn = MEM_WB_RegWrite & isC1;"),
+    "EBREAK does not halt":     ("assign pcLoad = isC0 & ~haltLatch;",
+                                 "assign pcLoad = isC0;"),
+    "JALR bit 0 kept":          ("{aluOutput[31:1], 1'b0}", "aluOutput"),
+    "MEM_WB in C0":             (".load(isC1),\n        .flush(1'b0),\n        .D(memWbIn),",
+                                 ".load(isC0),\n        .flush(1'b0),\n        .D(memWbIn),"),
+}
+
+PROGS = (["../Testing/programs/%s.hex" % p for p in
+          ("all_instr", "hazards", "nops_halt", "timing")] +
+         sorted(glob.glob("../Testing/compliance/*.hex")))
+
+def run(src_dir, prog):
+    rtl = [os.path.join(src_dir, f) for f in sorted(os.listdir(src_dir))
+           if f.endswith(".v") and not f.endswith("_tb.v")
+           and f not in ("datapath_board_pipelined.v", "SevenSegHex8.v",
+                         "Debounce.v", "CpuClockGen.v")]
+    timing = "1" if prog.endswith("timing.hex") else "0"
+    out = os.path.join(src_dir, "sim.out")
+    subprocess.run(["iverilog", "-g2012", "-I", src_dir, "-s", "pipeline_tb",
+                    "-Ppipeline_tb.ADDR_BITS=13",
+                    "-Ppipeline_tb.MAX_CYCLES=6000",
+                    "-Ppipeline_tb.CHECK_TIMING=" + timing,
+                    '-Ppipeline_tb.PROG="%s"' % os.path.abspath(prog),
+                    "-o", out, "pipeline_tb.v"] + rtl, check=True)
+    res = subprocess.run(["vvp", "-n", out], capture_output=True, text=True)
+    return "PASS" in res.stdout
+
+def main():
+    caught = 0
+    for name, (old, new) in MUTANTS.items():
+        with tempfile.TemporaryDirectory() as tmp:
+            for f in os.listdir("."):
+                if f.endswith((".v", ".vh")):
+                    text = open(f).read()
+                    if f == "pipeline.v":
+                        assert old in text, name
+                        text = text.replace(old, new)
+                    open(os.path.join(tmp, f), "w").write(text)
+            # stop at the first program that catches the mutant
+            failed = next((p for p in PROGS if not run(tmp, p)), None)
+        ok = failed is not None
+        caught += ok
+        print("%-24s %s %s" % (name, "CAUGHT by" if ok else "MISSED",
+                               os.path.basename(failed or "")))
+    print("%d / %d mutants caught" % (caught, len(MUTANTS)))
+    sys.exit(0 if caught == len(MUTANTS) else 1)
+
+if __name__ == "__main__":
+    main()

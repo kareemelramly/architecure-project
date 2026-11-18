@@ -2,14 +2,14 @@
  * Module: PipelineReg.v
  * Project: femtoRV32
  * Author: Kareem Elramly
- * Description: Generic pipeline boundary register (IF_ID, ID_EX, EX_MEM,
- *              MEM_WB) built on N_bit_register. Adds a synchronous flush that
- *              loads all zeros (a bubble: every control bit = 0).
- *              Callers must AND both load and flush with `advance` so the
- *              register only changes at the end of C1.
+ * Description: Generic pipeline register (IF_ID, ID_EX, EX_MEM, MEM_WB)
+ *              built on N_bit_register. load picks the phase (C0 or C1) in
+ *              which the register captures; flush loads all zeros, which is
+ *              a bubble (every control bit = 0).
  *
  * Change history:
  *   11/13/26 - Created load/flush pipeline register wrapper
+ *   11/18/26 - Comments updated for the 3-stage, 6-cycle pipeline
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -19,8 +19,8 @@ module PipelineReg #(
 )(
     input          clk,
     input          rst,
-    input          load,    // advance & ~stall
-    input          flush,   // advance & (mispredict | halt), wins over stall
+    input          load,    // phase in which the register captures
+    input          flush,   // load a bubble instead of D (wins over load)
     input  [N-1:0] D,
     output [N-1:0] Q
 );
