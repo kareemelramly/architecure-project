@@ -13,14 +13,19 @@
  *                Stage 2: WB  (C0)  register file write;   C1 unused
  *              The memory is used by IF in C0 and by MEM in C1 only, so
  *              there is no structural hazard.
- *              Data hazards: the only producer not yet written back when an
- *              instruction reads its registers is the instruction just
- *              before it, which is in WB while the consumer is in EX.
- *              MEM_WB -> EX forwarding covers it (loads included), so the
+ *              Branches and jumps (Bonus 4) are resolved in ID (C1). The
+ *              next fetch is in the following C0, so a taken branch or
+ *              jump loads its target into PC at the end of that C1 and no
+ *              wrong-path instruction is ever fetched: no flush, 0 cycles
+ *              lost.
+ *              Data hazards: when an instruction is in ID, the instruction
+ *              before it is in MEM (its result is in EX_MEM, or it is a
+ *              load reading the memory in this same C1) and the one before
+ *              that was written back in the previous C0. One forwarding
+ *              path EX_MEM/memory -> ID therefore gives ID the right
+ *              register values, for the branch compare, the JALR target
+ *              and ID_EX. Nothing needs forwarding into EX and the
  *              pipeline never stalls.
- *              Control hazards: branches and jumps are resolved in EX. A
- *              taken branch/jump loads the target into PC and flushes the
- *              one wrong-path instruction in IF_ID (1 slot = 2 cycles).
  *              EBREAK (decoded in ID) freezes the PC; older instructions
  *              still complete.
  *
@@ -29,6 +34,8 @@
  *   11/16/26 - Debug/board observation ports, PROGRAM_FILE parameter
  *   11/18/26 - Rebuilt as the 3-stage, 6-cycle pipeline of the project
  *              description: one forwarding path, no stalls, branch in EX
+ *   11/18/26 - Bonus 4: branch outcome and target computed in ID;
+ *              forwarding moved from EX to ID; IF_ID flush only on halt
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -90,25 +97,35 @@ module pipeline #(
     wire        cHalt;
     wire [1:0]  cMemToReg;
     wire [1:0]  cAluOp;
-    wire [11:0] idCtrl;
+    wire [8:0]  idCtrl;
     wire        idHalt;
     wire [31:0] readData1;
     wire [31:0] readData2;
     wire [31:0] immGenOut;
+    wire        forwardA;
+    wire        forwardB;
+    wire [31:0] memStageData;
+    wire [31:0] idRs1Data;
+    wire [31:0] idRs2Data;
+    wire        idBranch;
+    wire        idIsJal;
+    wire        idIsJalr;
+    wire        takeBranch;
+    wire        pcSrc;
+    wire [31:0] branchTarget;
+    wire [31:0] jalrSum;
+    wire [31:0] jumpTarget;
     wire        haltSet;
     wire        haltNext;
     wire        haltLatch;
 
     // ---------------- ID_EX ----------------
-    wire [171:0] idExIn;
-    wire [171:0] idExOut;
+    wire [168:0] idExIn;
+    wire [168:0] idExOut;
     wire        ID_EX_RegWrite;
     wire [1:0]  ID_EX_MemToReg;
     wire        ID_EX_MemRead;
     wire        ID_EX_MemWrite;
-    wire        ID_EX_Branch;
-    wire        ID_EX_IsJal;
-    wire        ID_EX_IsJalr;
     wire        ID_EX_AluSource;
     wire        ID_EX_AluSrcA;
     wire [1:0]  ID_EX_AluOp;
@@ -117,25 +134,15 @@ module pipeline #(
     wire [31:0] ID_EX_RegR2;
     wire [31:0] ID_EX_Imm;
     wire [31:0] ID_EX_Inst;
-    wire [4:0]  ID_EX_Rs1;
-    wire [4:0]  ID_EX_Rs2;
     wire [4:0]  ID_EX_Rd;
     wire [2:0]  ID_EX_Funct3;
 
     // ---------------- EX (C0) ----------------
-    wire        forwardA;
-    wire        forwardB;
-    wire [31:0] fwdRs1;
-    wire [31:0] fwdRs2;
     wire [31:0] aluInputData1;
     wire [31:0] aluInputData2;
     wire [4:0]  aluSel;
     wire [31:0] aluOutput;
     wire        aluZero;
-    wire        takeBranch;
-    wire        pcSrc;
-    wire [31:0] branchTarget;
-    wire [31:0] jumpTarget;
     wire [31:0] exPcPlus4;
     wire [31:0] exResult;
     wire        exWbFromMem;
@@ -178,10 +185,12 @@ module pipeline #(
     // Stage 0, C0: IF
     // =========================================================================
     assign pcPlus4 = pcValue + `PC_STEP;
-    assign pcNext  = (pcSrc) ? jumpTarget : pcPlus4;
+    assign pcNext  = (isC1) ? jumpTarget : pcPlus4;
 
-    // PC moves at the end of C0 (after the fetch) unless EBREAK halted it
-    assign pcLoad = isC0 & ~haltLatch;
+    // PC moves to PC + 4 at the end of C0 (after the fetch), and to the
+    // target at the end of C1 when the branch/jump in ID is taken. EBREAK
+    // freezes it.
+    assign pcLoad = (isC0 | (isC1 & pcSrc)) & ~haltLatch;
 
     N_bit_register #(32) pcRegister(
         .clk(clk),
@@ -212,11 +221,12 @@ module pipeline #(
     );
 
     // =========================================================================
-    // IF_ID: captures at the end of C0. A taken branch/jump in EX (same C0)
-    // or a halted CPU turns the fetched instruction into a bubble.
+    // IF_ID: captures at the end of C0. After EBREAK the fetched word is
+    // turned into a bubble. Branches never need a flush (resolved in ID,
+    // before the next fetch).
     // =========================================================================
     assign ifIdIn    = {pcValue, memDataOut};
-    assign ifIdFlush = isC0 & (pcSrc | haltLatch);
+    assign ifIdFlush = isC0 & haltLatch;
 
     PipelineReg #(64) IF_ID(
         .clk(clk),
@@ -250,11 +260,11 @@ module pipeline #(
         .aluOp(cAluOp)
     );
 
-    // Bubbles carry no control
+    // Bubbles carry no control. Branch/jump bits stay in ID (resolved
+    // there); JAL/JALR still reach WB through memToReg = PC + 4.
     assign idCtrl = (idValid) ? {cRegWrite, cMemToReg, cMemRead, cMemWrite,
-                                 cBranch, cIsJal, cIsJalr, cAluSource,
-                                 cAluSrcA, cAluOp}
-                              : 12'd0;
+                                 cAluSource, cAluSrcA, cAluOp}
+                              : 9'd0;
     assign idHalt = cHalt & idValid;
 
     // The register file is written in C0 (WB) and read in C1 (ID), so a
@@ -278,6 +288,44 @@ module pipeline #(
         .genOut(immGenOut)
     );
 
+    // ---- Forwarding into ID (used in C1) ----
+    // The instruction before this one is in MEM: its value is the EX
+    // result in EX_MEM, or for a load the memory output of this same C1.
+    // ForwardingUnit is reused unchanged: its "EX" inputs are the ID
+    // source registers and its "MEM_WB" inputs are the EX_MEM ones.
+    ForwardingUnit forwarding(
+        .exRs1(IF_ID_Inst[19:15]),
+        .exRs2(IF_ID_Inst[24:20]),
+        .memWbRd(EX_MEM_Rd),
+        .memWbRegWrite(EX_MEM_RegWrite),
+        .forwardA(forwardA),
+        .forwardB(forwardB)
+    );
+
+    assign memStageData = (EX_MEM_WbFromMem) ? memDataOut : EX_MEM_Result;
+    assign idRs1Data    = (forwardA) ? memStageData : readData1;
+    assign idRs2Data    = (forwardB) ? memStageData : readData2;
+
+    // ---- Branch / jump resolution in ID (Bonus 4) ----
+    assign idBranch = cBranch & idValid;
+    assign idIsJal  = cIsJal  & idValid;
+    assign idIsJalr = cIsJalr & idValid;
+
+    BranchUnit branchComparator(
+        .branch(idBranch),
+        .funct3(IF_ID_Inst[14:12]),
+        .readData1(idRs1Data),
+        .readData2(idRs2Data),
+        .takeBranch(takeBranch)
+    );
+
+    // Branch / JAL target = PC + imm, JALR target = (rs1 + imm), bit 0
+    // cleared
+    assign branchTarget = IF_ID_PC + immGenOut;
+    assign jalrSum      = idRs1Data + immGenOut;
+    assign jumpTarget   = (idIsJalr) ? {jalrSum[31:1], 1'b0} : branchTarget;
+    assign pcSrc        = takeBranch | idIsJal | idIsJalr;
+
     // EBREAK: once decoded, the PC never moves again
     assign haltSet  = isC1 & idHalt;
     assign haltNext = haltLatch | haltSet;
@@ -292,10 +340,11 @@ module pipeline #(
     // =========================================================================
     // ID_EX: captures at the end of C1 (stage 0 -> stage 1 boundary)
     // =========================================================================
-    assign idExIn = {idCtrl, IF_ID_PC, readData1, readData2, immGenOut,
+    // Register values are already forwarded, so EX needs no forwarding
+    assign idExIn = {idCtrl, IF_ID_PC, idRs1Data, idRs2Data, immGenOut,
                      IF_ID_Inst};
 
-    PipelineReg #(172) ID_EX(
+    PipelineReg #(169) ID_EX(
         .clk(clk),
         .rst(rst),
         .load(isC1),
@@ -305,34 +354,19 @@ module pipeline #(
     );
 
     assign {ID_EX_RegWrite, ID_EX_MemToReg, ID_EX_MemRead, ID_EX_MemWrite,
-            ID_EX_Branch, ID_EX_IsJal, ID_EX_IsJalr, ID_EX_AluSource,
-            ID_EX_AluSrcA, ID_EX_AluOp,
+            ID_EX_AluSource, ID_EX_AluSrcA, ID_EX_AluOp,
             ID_EX_PC, ID_EX_RegR1, ID_EX_RegR2, ID_EX_Imm,
             ID_EX_Inst} = idExOut;
 
     assign ID_EX_Rd     = ID_EX_Inst[11:7];
     assign ID_EX_Funct3 = ID_EX_Inst[14:12];
-    assign ID_EX_Rs1    = ID_EX_Inst[19:15];
-    assign ID_EX_Rs2    = ID_EX_Inst[24:20];
 
     // =========================================================================
     // Stage 1, C0: EX
     // =========================================================================
-    ForwardingUnit forwarding(
-        .exRs1(ID_EX_Rs1),
-        .exRs2(ID_EX_Rs2),
-        .memWbRd(MEM_WB_Rd),
-        .memWbRegWrite(MEM_WB_RegWrite),
-        .forwardA(forwardA),
-        .forwardB(forwardB)
-    );
-
-    // Forward on the register value first, then apply the ALU source muxes
-    assign fwdRs1 = (forwardA) ? regWriteData : ID_EX_RegR1;
-    assign fwdRs2 = (forwardB) ? regWriteData : ID_EX_RegR2;
-
-    assign aluInputData1 = (ID_EX_AluSrcA)   ? ID_EX_PC  : fwdRs1;
-    assign aluInputData2 = (ID_EX_AluSource) ? ID_EX_Imm : fwdRs2;
+    // ID_EX already holds forwarded register values
+    assign aluInputData1 = (ID_EX_AluSrcA)   ? ID_EX_PC  : ID_EX_RegR1;
+    assign aluInputData2 = (ID_EX_AluSource) ? ID_EX_Imm : ID_EX_RegR2;
 
     alu_unit AluControl(
         .aluOp(ID_EX_AluOp),
@@ -348,21 +382,6 @@ module pipeline #(
         .zero(aluZero)
     );
 
-    BranchUnit branchComparator(
-        .branch(ID_EX_Branch),
-        .funct3(ID_EX_Funct3),
-        .readData1(fwdRs1),
-        .readData2(fwdRs2),
-        .takeBranch(takeBranch)
-    );
-
-    // Branch / JAL target = PC + imm, JALR target = (rs1 + imm) with bit 0
-    // cleared (rs1 + imm comes out of the ALU)
-    assign branchTarget = ID_EX_PC + ID_EX_Imm;
-    assign jumpTarget   = (ID_EX_IsJalr) ? {aluOutput[31:1], 1'b0}
-                                         : branchTarget;
-    assign pcSrc        = takeBranch | ID_EX_IsJal | ID_EX_IsJalr;
-
     // Final non-memory result, so forwarding is right for JAL/JALR/LUI too
     assign exPcPlus4   = ID_EX_PC + `PC_STEP;
     assign exResult    = (ID_EX_MemToReg == `WB_PC4) ? exPcPlus4 :
@@ -373,7 +392,7 @@ module pipeline #(
     // EX_MEM: captures at the end of C0
     // =========================================================================
     assign exMemIn = {ID_EX_RegWrite, exWbFromMem, ID_EX_MemRead,
-                      ID_EX_MemWrite, exResult, fwdRs2, ID_EX_Funct3,
+                      ID_EX_MemWrite, exResult, ID_EX_RegR2, ID_EX_Funct3,
                       ID_EX_Rd};
 
     PipelineReg #(76) EX_MEM(
@@ -424,12 +443,13 @@ module pipeline #(
     assign dbgWbData    = regWriteData;
     assign dbgStoreData = EX_MEM_StoreData;
     assign dbgHalt      = haltLatch;
-    // LD14 phase, LD13 ID valid, LD12/11 forward A/B, LD10 pcSrc (flush),
-    // LD9 branch taken, LD8/7 JAL/JALR in EX, LD6/5 memory read/write,
+    // LD14 phase, LD13 ID valid, LD12/11 forward A/B into ID, LD10 pcSrc
+    // (redirect in ID), LD9 branch taken, LD8/7 JAL/JALR in ID (all ID
+    // flags are meaningful in C1), LD6/5 memory read/write,
     // LD4 register write, LD3..0 ALU select (bit 15 is ALU zero; the
     // board shows the halt flag on LD15 instead)
     assign dbgFlags     = {aluZero, phase, idValid, forwardA, forwardB,
-                           pcSrc, takeBranch, ID_EX_IsJal, ID_EX_IsJalr,
+                           pcSrc, takeBranch, idIsJal, idIsJalr,
                            memReadEn, memWriteEn, regWriteEn, aluSel[3:0]};
 
 endmodule
