@@ -6,12 +6,10 @@
  *              femtoRV32.
  *              SW15 = reset, BTNC = one CPU clock cycle: the debounced button
  *              is the CPU clock (step mode only). The 8-digit display shows
- *              the 32-bit
- *              value chosen by SW5..SW2 (ssdSel):
- *                0 PC, 1 instruction in ID, 2 EX result, 3 memory address,
- *                4 memory data out, 5 write-back data, 6 store data
- *              LEDs show the 16-bit value chosen by SW1..SW0 (ledSel):
- *                00 instruction[14:0], 10 instruction[30:16], 01 flags
+ *              the 32-bit value (in decimal) chosen by SW3..SW2 (ssdSel):
+ *                0 PC, 1 instruction in ID, 2 write-back data
+ *              LD14..LD0 show the instruction in ID, chosen by SW0 (ledSel):
+ *                0 instruction[14:0], 1 instruction[30:16]
  *              LD15 and the decimal points light when EBREAK halted the CPU.
  *              PROGRAM_FILE picks the built-in program in UnifiedMem.v.
  *              The reset switch is synchronised to sysClk with two
@@ -26,6 +24,8 @@
  *   11/18/26 - step mode only: CpuClockGen and SW6/SW7 removed
  *   11/18/26 - register viewer (regSel, SW12..SW8) removed with the
  *              register file debug port
+ *   11/18/26 - CPU debug ports removed: views reduced to PC, instruction
+ *              and write-back data; flag view removed
  ******************************************************************************/
 
 `timescale 1ns / 1ps
@@ -37,8 +37,8 @@ module datapath_board_pipelined #(
     input  wire        sysClk,
     input  wire        reset,
     input  wire        stepBtn,
-    input  wire [1:0]  ledSel,
-    input  wire [3:0]  ssdSel,
+    input  wire        ledSel,
+    input  wire [1:0]  ssdSel,
     output wire [15:0] leds,
     output wire [7:0]  Anode,
     output wire [6:0]  LED_out,
@@ -49,18 +49,13 @@ module datapath_board_pipelined #(
     wire        rst;
     wire        cpuClk;
 
-    wire [31:0] dbgPC;
-    wire [31:0] dbgInst;
-    wire [31:0] dbgAluResult;
-    wire [31:0] dbgMemAddr;
-    wire [31:0] dbgMemOut;
-    wire [31:0] dbgWbData;
-    wire [31:0] dbgStoreData;
-    wire [15:0] dbgFlags;
-    wire        dbgHalt;
+    wire [31:0] cpuPC;
+    wire [31:0] cpuInst;
+    wire [31:0] cpuWbData;
+    wire        cpuHalted;
 
     reg  [31:0] ssdView;
-    reg  [14:0] ledView;
+    wire [14:0] ledView;
 
     // ---------------- Reset synchronizer (2 flip-flops) ----------------
     DFlipFlop rstSync0(
@@ -91,46 +86,29 @@ module datapath_board_pipelined #(
     ) cpu(
         .clk(cpuClk),
         .rst(rst),
-        .dbgPC(dbgPC),
-        .dbgInst(dbgInst),
-        .dbgAluResult(dbgAluResult),
-        .dbgMemAddr(dbgMemAddr),
-        .dbgMemOut(dbgMemOut),
-        .dbgWbData(dbgWbData),
-        .dbgStoreData(dbgStoreData),
-        .dbgFlags(dbgFlags),
-        .dbgHalt(dbgHalt)
+        .pcOut(cpuPC),
+        .instOut(cpuInst),
+        .wbDataOut(cpuWbData),
+        .halted(cpuHalted)
     );
 
     // ---------------- Display / LED views ----------------
     always @* begin
         case (ssdSel)
-            4'd0:    ssdView = dbgPC;
-            4'd1:    ssdView = dbgInst;
-            4'd2:    ssdView = dbgAluResult;
-            4'd3:    ssdView = dbgMemAddr;
-            4'd4:    ssdView = dbgMemOut;
-            4'd5:    ssdView = dbgWbData;
-            4'd6:    ssdView = dbgStoreData;
+            2'd0:    ssdView = cpuPC;
+            2'd1:    ssdView = cpuInst;
+            2'd2:    ssdView = cpuWbData;
             default: ssdView = 32'd0;
         endcase
     end
 
-    always @* begin
-        case (ledSel)
-            2'b00:   ledView = dbgInst[14:0];
-            2'b10:   ledView = dbgInst[30:16];
-            2'b01:   ledView = dbgFlags[14:0];
-            default: ledView = 15'd0;
-        endcase
-    end
-
-    assign leds = {dbgHalt, ledView};
+    assign ledView = (ledSel) ? cpuInst[30:16] : cpuInst[14:0];
+    assign leds    = {cpuHalted, ledView};
 
     SevenSegDecimal8 display(
         .clk(sysClk),
         .rst(rst),
-        .dpOn(dbgHalt),
+        .dpOn(cpuHalted),
         .value(ssdView),
         .Anode(Anode),
         .LED_out(LED_out),
