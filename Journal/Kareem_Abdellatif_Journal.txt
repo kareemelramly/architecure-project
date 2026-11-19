@@ -15,14 +15,36 @@ During integration, I checked testbench control connections and message widths, 
 November 2, 2026: documentation and verification record.
 Prepared the README files, release notes and design report. Recorded a fresh passing simulation, generated a Yosys datapath schematic and captured actual load/store and system/synchronization waveforms. This entry records the current documentation activity; earlier implementation dates and exact work-session times are not asserted here.
 
+November 13, 2026: MS3 pipeline infrastructure.
 Combined InstMem and DataMem into UnifiedMem.v, a single-ported, byte-addressable memory. Wrote PhaseController.v (C0 = fetch, C1 = data access), PipelineReg.v and BranchPredictor.v (16-entry BTB with 2-bit counters, Bonus 3). Built the first pipelined top level and a self-checking testbench that compares it with the single-cycle datapath.
 
-November 16, 2026: MS3 spec fixes and the final 5-stage design.
-Fixed the decode so that only EBREAK halts; ECALL, FENCE, FENCE.TSO and PAUSE are NOPs. Added debug ports and a debug register-read port for the board, and a PROGRAM_FILE parameter so the memory can load a hex program. Kept the 5-stage pipeline (IF, ID, EX, MEM, WB) required by the doctor; the single memory port makes every stage a 2-cycle slot (C0 fetch, C1 data), so the pipeline stalls every second cycle. A 3-stage variant was tried and archived outside the submission. Added the assembly test programs, the mutation test, the 5-stage block diagram, the waveforms and the MS3 report.
+November 16, 2026: MS3 spec fixes and the final 3-stage design.
+Fixed the decode so that only EBREAK halts; ECALL, FENCE, FENCE.TSO and PAUSE are NOPs. Added a PROGRAM_FILE parameter so the memory can load a hex program. Converted the design to the 3-stage, 6-cycle pipeline (commit 7b8f46f); the single memory port makes every stage a 2-cycle slot (C0 fetch, C1 data), so one instruction issues every 2 cycles and the design never stalls. Added the assembly test programs, the mutation test, the 3-stage block diagram, the waveforms and the MS3 report.
 
 
-MS3 work distribution (planned tasks)
+--- MS3 work distribution (planned tasks) ---
 Unified Memory Module (UnifiedMem.v): one single-ported, byte-addressable memory replacing InstMem and DataMem.
 C0/C1 Phase Controller (PhaseController.v): issue one instruction every 2 cycles (CPI = 2), no structural hazard on the memory port.
 Pipeline registers (PipelineReg.v): the stage boundaries that hold PC, instruction and control signals.
-Bonus 3 BranchPredictor.v (BTB + 2-bit BHT): written first, not part of the final design.
+Bonus 3 BranchPredictor.v (BTB + 2-bit BHT): written first, not part of the final design (see the November 19 entry).
+
+--- MS3 entries (times taken from the GitHub commit history, Cairo time) ---
+November 13, 11:07 PM: added pipelines, unified memory and branch predictor.
+Commit b9e6d04. First pipelined top level with UnifiedMem, PhaseController, PipelineReg and BranchPredictor.
+November 16, 1:45 PM: converted the pipeline to 3 stages (IF+ID, EX+MEM, WB) with the branch resolved in ID.
+Commit 7b8f46f. Each stage takes two cycles, one instruction is issued every two cycles, 6 cycles per instruction.
+November 16, 2:00 PM: some issues resolved.
+Commit 39329c1.
+November 18 (every entry below is work of the whole team: Kareem, Mohamed and Mostafa; the commits were pushed from Kareem's GitHub account).
+November 18, 10:23 AM: doing some modifications.
+Commit 04aee0e.
+November 18, 12:16 PM: unified memory updated.
+Commit 2fd61e2. Word array with byte write enables so the FPGA tools use LUT RAM.
+November 18, 1:17 PM to 1:45 PM: board clock and display clean-up.
+Commits 73c419c, 0acbfb9, b900976, 77c6245: CpuClockGen added and removed again (step mode only, BTNC is the CPU clock), seven-segment driver optimized, debug port removed.
+November 18, 3:13 PM to 3:44 PM: bonus features, renaming, testbench.
+Commits 39d040d, 477e0a0, 806b083, 6c70f76: "bonus added", "branch bonus added and variables renamed" (signals renamed by stage), self-checking testbench of the pipeline added, extra seven-segment files removed.
+November 18, 4:27 PM: board implemented and hazard detection adjusted.
+Commit fda933f. The hazard handling became the single forwarding unit in ID with no stalls.
+November 19: final state of the design.
+The submitted design is the 3-stage, 6-cycle pipeline from commit 7b8f46f. BranchPredictor.v and HazardUnit.v are not in the submitted Verilog folder: with the branch resolved in ID, a taken branch loses no cycle, so a predictor adds nothing, and the design never stalls. Bonuses claimed: Bonus 2 (RV32M) and Bonus 4 (branch in ID).
