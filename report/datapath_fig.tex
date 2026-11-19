@@ -1,0 +1,145 @@
+% Datapath schematic of the 3-stage, 6-cycle femtoRV32 (pipeline.v).
+% A label next to a short arrow ("tag") is wired to the tag with the same
+% name elsewhere in the drawing; this keeps the drawing free of long wires.
+\begin{tikzpicture}[
+  x=1cm,y=1cm,
+  font=\scriptsize,
+  >=Stealth,
+  blk/.style={draw,rounded corners=1.5pt,fill=blue!7,align=center,minimum height=0.9cm,inner sep=2pt},
+  reg/.style={draw,fill=orange!22,align=center,minimum width=0.75cm,inner sep=2pt},
+  mux/.style={draw,fill=gray!18,minimum width=0.55cm,minimum height=1.1cm,inner sep=0pt},
+  mem/.style={draw,rounded corners=1.5pt,fill=green!10,align=center,minimum height=1.3cm,inner sep=3pt},
+  wire/.style={->,thick},
+  bus/.style={->,very thick,blue!55!black},
+  tag/.style={font=\tiny\ttfamily,inner sep=1pt,align=center},
+  stage/.style={dashed,gray}
+]
+% ------------------------------------------------------------------ stages
+\draw[stage] (16.35,-0.8) -- (16.35,12.6);
+\draw[stage] (27.3,-0.8) -- (27.3,12.6);
+\node[font=\small\bfseries] at (7.5,12.3) {Stage 0: IF (C0) + ID (C1)};
+\node[font=\small\bfseries] at (21.8,12.3) {Stage 1: EX (C0) + MEM (C1)};
+\node[font=\small\bfseries] at (29.0,12.3) {Stage 2: WB (C0)};
+
+% --------------------------------------------------------------------- IF
+\node[mux] (pcmux) at (0.4,6.0) {};
+\node[tag,above=0.05cm of pcmux] {sel isC1};
+\node[blk,minimum width=1.0cm,minimum height=1.1cm] (pc) at (2.6,6.0) {PC};
+\node[tag,above=0.08cm of pc] {load: C0, or C1\\and PcSrc, not halt};
+\node[blk,minimum width=1.0cm] (p4) at (2.6,3.9) {+4};
+\draw[wire] (pcmux.east) -- (pc.west);
+\draw[wire] (pc.south) -- (p4.north);
+\draw[wire] (p4.west) -- (-0.7,3.9) -- (-0.7,5.7) -- (0.125,5.7);
+\node[tag,anchor=east] at (-0.95,6.3) {jumpTarget};
+\draw[wire] (-0.9,6.3) -- (0.125,6.3);
+
+\node[mux] (amux) at (4.2,10.8) {};
+\node[tag,above=0.05cm of amux] {sel isC0};
+\node[mem,minimum width=5.6cm,text width=5.4cm] (mem) at (8.4,10.8) {\textbf{UnifiedMem}: 1 KB, single port\\
+  C0: fetch (addr = PC)\\C1: load/store (addr = EX\_MEM\_Result)};
+\draw[wire] (pc.east) -- (3.5,6.0) -- (3.5,10.55) -- (3.925,10.55);
+\fill (3.5,6.0) circle (1pt);
+\node[tag,anchor=east] at (3.0,11.05) {EX\_MEM\_Result};
+\draw[wire] (3.0,11.05) -- (3.925,11.05);
+\draw[wire] (amux.east) -- (mem.west);
+\node[tag,anchor=west] at (11.55,11.05) {EX\_MEM\_StoreData};
+\node[tag,anchor=west] at (11.55,10.55) {EX\_MEM\_Funct3, MemRead, MemWrite};
+\draw[wire] (11.5,11.05) -- (11.2,11.05);
+\draw[wire] (11.5,10.55) -- (11.2,10.55);
+
+\node[reg,minimum height=5.0cm] (ifid) at (6.0,6.0) {IF\\ID};
+\node[tag,anchor=east] at (5.55,3.7) {IF\_ID\\loads at\\end of C0};
+\draw[bus] (6.6,10.15) -- (6.6,9.4) -- (6.0,9.4) -- (ifid.north);
+\node[tag,anchor=west] at (6.7,9.7) {inst};
+\draw[bus] (3.5,6.0) -- (ifid.west) node[midway,above,tag] {PC};
+
+% --------------------------------------------------------------------- ID
+\node[blk,minimum width=2.4cm,minimum height=1.9cm] (rf) at (9.2,6.0) {RegFile\\32 x 32\\{\tiny write C0, read C1}\\{\tiny x0 = 0}};
+\node[blk,minimum width=2.4cm] (imm) at (9.2,3.3) {ImmGen};
+\node[blk,minimum width=2.0cm,minimum height=1.2cm] (ctl) at (6.0,2.0) {control\_unit};
+\draw[bus] (6.375,6.4) -- (8.0,6.4) node[midway,above,tag] {rs1, rs2};
+\draw[bus] (6.375,3.5) -- (8.0,3.5) node[midway,above,tag] {inst};
+\draw[bus] (6.0,3.5) -- (ctl.north);
+\draw[bus] (10.4,3.3) -- (10.9,3.3) node[tag,anchor=west] {imm};
+\draw[wire] (ctl.south) -- ++(0,-0.4) node[tag,anchor=north] {ctrl};
+\node[tag,anchor=east] at (8.9,4.4) {WB data, rd, we};
+\draw[wire] (8.95,4.4) -- (9.2,4.4) -- (9.2,5.05);
+
+\node[blk,minimum width=2.4cm,minimum height=1.9cm] (fwd) at (12.4,6.0) {Forwarding-\\Unit\\{\tiny rs1 / rs2 select}};
+\draw[bus] (10.4,6.4) -- (11.2,6.4) node[midway,above,tag] {rd1};
+\draw[bus] (10.4,5.6) -- (11.2,5.6) node[midway,below,tag] {rd2};
+\node[tag,anchor=north,align=left] at (12.4,4.35) {EX\_MEM: Rd, RegWrite, IsLoad, Result\\memPortDataOut (load data, same C1)};
+\draw[wire] (12.4,4.4) -- (12.4,5.05);
+\node[blk,minimum width=1.8cm] (br) at (14.9,6.9) {BranchUnit\\{\tiny compare}};
+\draw[bus] (13.6,6.4) -- (13.8,6.4) -- (13.8,6.9) -- (14.0,6.9);
+\node[tag,anchor=west] at (13.7,5.4) {rs1Data, rs2Data};
+\node[blk,minimum width=1.6cm] (tadd) at (8.9,8.3) {PC + imm};
+\node[tag,anchor=east] at (7.75,8.3) {PC, imm};
+\draw[wire] (7.8,8.3) -- (tadd.west);
+\node[blk,minimum width=2.2cm] (jadd) at (11.3,8.3) {rs1Data + imm\\{\tiny clear bit 0}};
+\node[tag,anchor=north] at (11.3,7.55) {rs1Data, imm};
+\draw[wire] (11.3,7.6) -- (jadd.south);
+\node[mux] (tmux) at (14.9,9.0) {};
+\draw[wire] (tadd.north) -- (8.9,9.0) -- (14.625,9.0);
+\draw[wire] (jadd.north) -- (11.3,9.0);
+\draw[wire] (br.north) -- (tmux.south) node[midway,right,tag] {PcSrc};
+\node[tag,anchor=west] at (15.3,9.0) {jumpTarget};
+\draw[wire] (tmux.east) -- (15.25,9.0);
+\node[blk,minimum width=1.7cm,fill=red!8] (halt) at (14.9,2.0) {haltState FF\\{\tiny EBREAK}};
+\draw[wire] (ctl.east) -- (halt.west) node[pos=0.5,above,tag] {halt};
+\node[tag,anchor=west] at (15.85,2.0) {haltState};
+\draw[wire] (halt.east) -- (15.8,2.0);
+
+% ------------------------------------------------------------------ ID_EX
+\node[reg,minimum height=6.0cm] (idex) at (17.8,5.6) {ID\\EX};
+\node[tag,below=0.05cm of idex] {ID\_EX, loads\\at end of C1};
+\foreach \y/\t in {7.9/ctrl, 6.9/PC, 5.9/rs1Data, 4.9/rs2Data, 3.9/imm, 2.9/inst} {
+  \draw[->] (17.0,\y) -- (17.425,\y);
+  \node[tag,anchor=east] at (17.0,\y) {\t};
+}
+% --------------------------------------------------------------------- EX
+\node[mux] (amuxa) at (19.7,6.6) {};
+\node[tag,above=0.05cm of amuxa] {AluSrcA};
+\node[mux] (amuxb) at (19.7,4.4) {};
+\node[tag,below=0.05cm of amuxb] {AluSource};
+\draw[wire] (17.425,6.9) -- (19.425,6.9);
+\draw[wire] (17.425,5.9) -- (18.0,5.9) -- (18.0,6.3) -- (19.425,6.3);
+\draw[wire] (17.425,4.9) -- (19.425,4.7);
+\draw[wire] (17.425,3.9) -- (18.0,3.9) -- (18.0,4.1) -- (19.425,4.1);
+\node[blk,minimum width=1.6cm,minimum height=1.3cm] (alu) at (21.7,5.5) {ALU\\{\tiny RV32I + RV32M}};
+\node[blk,minimum width=1.7cm] (aluc) at (21.7,7.7) {alu\_unit};
+\node[tag,above=0.05cm of aluc] {AluOp, inst};
+\draw[wire] (aluc.south) -- (alu.north);
+\draw[wire] (19.975,6.6) -- (20.5,6.6) -- (20.5,5.8) -- (20.9,5.8);
+\draw[wire] (19.975,4.4) -- (20.5,4.4) -- (20.5,5.2) -- (20.9,5.2);
+\node[mux,minimum width=0.8cm,minimum height=1.4cm] (resmux) at (23.6,5.5) {};
+\node[tag,above=0.4cm of resmux] {ID\_EX\_PC+4};
+\draw[wire] (23.6,6.4) -- (resmux.north);
+\node[tag,below=0.4cm of resmux] {imm};
+\draw[wire] (23.6,4.6) -- (resmux.south);
+\draw[wire] (alu.east) -- (resmux.west);
+\node[tag] at (23.6,5.5) {Mem\\ToReg};
+% ------------------------------------------------------------------ EX_MEM
+\node[reg,minimum height=3.4cm] (exmem) at (24.9,5.0) {EX\\MEM};
+\node[tag,below=0.05cm of exmem] {EX\_MEM, loads\\at end of C0};
+\draw[wire] (resmux.east) -- (24.525,5.5);
+\foreach \y/\t in {6.2/EX\_MEM\_Result, 5.6/EX\_MEM\_StoreData, 5.0/EX\_MEM\_Funct3 MemRead MemWrite, 4.4/EX\_MEM\_Rd RegWrite} {
+  \draw[->] (25.3,\y) -- (25.75,\y);
+  \node[tag,anchor=west] at (25.75,\y) {\t};
+}
+% ----------------------------------------------------------------- MEM_WB / WB
+\node[reg,minimum height=3.0cm] (memwb) at (28.2,8.9) {MEM\\WB};
+\node[tag,below=0.05cm of memwb] {MEM\_WB, loads\\at end of C1};
+\foreach \y/\t in {9.6/memPortDataOut, 8.9/EX\_MEM\_Result, 8.2/EX\_MEM\_Rd} {
+  \draw[->] (27.45,\y) -- (27.825,\y);
+  \node[tag,anchor=east] at (27.45,\y) {\t};
+}
+\node[mux] (wbmux) at (29.6,9.3) {};
+\node[tag,above=0.05cm of wbmux] {WbFromMem};
+\draw[wire] (28.575,9.6) -- (29.325,9.6);
+\draw[wire] (28.575,8.9) -- (29.0,8.9) -- (29.0,9.0) -- (29.325,9.0);
+\draw[wire] (wbmux.south) -- ++(0,-0.4) node[tag,anchor=north] {WB data};
+% ------------------------------------------------------------ phase controller
+\node[blk,minimum width=3.2cm,fill=yellow!20] (phase) at (1.8,1.3) {PhaseController\\{\tiny toggle FF: C0 / C1}};
+\node[tag,anchor=north,align=left] at (1.8,0.55) {isC0, isC1 = register enables:\\IF\_ID, EX\_MEM in C0\\ID\_EX, MEM\_WB in C1};
+\end{tikzpicture}

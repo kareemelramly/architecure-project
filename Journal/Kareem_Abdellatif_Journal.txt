@@ -15,9 +15,14 @@ During integration, I checked testbench control connections and message widths, 
 November 2, 2026: documentation and verification record.
 Prepared the README files, release notes and design report. Recorded a fresh passing simulation, generated a Yosys datapath schematic and captured actual load/store and system/synchronization waveforms. This entry records the current documentation activity; earlier implementation dates and exact work-session times are not asserted here.
 
-November 13, 2026: MS3 pipeline infrastructure.
 Combined InstMem and DataMem into UnifiedMem.v, a single-ported, byte-addressable memory. Wrote PhaseController.v (C0 = fetch, C1 = data access), PipelineReg.v and BranchPredictor.v (16-entry BTB with 2-bit counters, Bonus 3). Built the first pipelined top level and a self-checking testbench that compares it with the single-cycle datapath.
 
 November 16, 2026: MS3 spec fixes and the final 5-stage design.
 Fixed the decode so that only EBREAK halts; ECALL, FENCE, FENCE.TSO and PAUSE are NOPs. Added debug ports and a debug register-read port for the board, and a PROGRAM_FILE parameter so the memory can load a hex program. Kept the 5-stage pipeline (IF, ID, EX, MEM, WB) required by the doctor; the single memory port makes every stage a 2-cycle slot (C0 fetch, C1 data), so the pipeline stalls every second cycle. A 3-stage variant was tried and archived outside the submission. Added the assembly test programs, the mutation test, the 5-stage block diagram, the waveforms and the MS3 report.
 
+
+MS3 work distribution (planned tasks)
+Unified Memory Module (UnifiedMem.v): one single-ported, byte-addressable memory replacing InstMem and DataMem.
+C0/C1 Phase Controller (PhaseController.v): issue one instruction every 2 cycles (CPI = 2), no structural hazard on the memory port.
+Pipeline registers (PipelineReg.v): the stage boundaries that hold PC, instruction and control signals.
+Bonus 3 BranchPredictor.v (BTB + 2-bit BHT): written first, not part of the final design.

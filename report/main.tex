@@ -1,0 +1,210 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{float}
+\usepackage[font=small,labelfont=bf]{caption}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{pdflscape}
+\usepackage{fancyhdr}
+\usepackage{needspace}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\headheight}{14pt}
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{0pt}
+\renewcommand{\arraystretch}{1.12}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{femtoRV32, Milestone 3}\fancyhead[R]{CSCE 3301, Fall 2026}\fancyfoot[C]{\thepage}
+\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,frame=single,columns=fullflexible}
+\newcommand{\sig}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\file}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\hd}[1]{\needspace{8\baselineskip}\vspace{0.4em}{\large\bfseries\color{blue!40!black}#1}\par\vspace{-0.2em}\hrule\vspace{0.4em}}
+
+\begin{document}
+
+\begin{center}
+{\Huge\bfseries femtoRV32}\\[0.3em]
+{\Large Pipelined RV32IM processor with a single single-ported memory}\\[0.3em]
+Design, implementation and verification report, 19 November 2026\\[0.5em]
+Kareem Abdellatif, Mohamed AboElfotouh, Mostafa Fayed\\
+Bonus features: Bonus 2 (RV32M) and Bonus 4 (branch resolution in ID)
+\end{center}
+
+\hd{1. Datapath architecture}
+
+Instructions and data share one single-ported, byte-addressable memory. One instruction is issued every two clock cycles (CPI = 2), so the memory port is never needed twice in the same cycle. Each instruction takes six cycles in three stages of two cycles (C0, C1):
+
+\begin{center}\small
+\begin{tabularx}{0.95\linewidth}{@{}l X X@{}}
+\toprule
+Stage & C0 & C1\\
+\midrule
+0 & IF: fetch at PC (memory port) & ID: decode, register read, branch/jump decision\\
+1 & EX: ALU & MEM: load / store (memory port)\\
+2 & WB: register file write & unused\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Figure~\ref{fig:datapath} shows the datapath. A one-bit toggle (\file{PhaseController.v}) gives the enables \sig{isC0} and \sig{isC1}; every register is on one clock and loads only on its enable (IF\_ID and EX\_MEM in C0, ID\_EX and MEM\_WB in C1). In C0 the memory address is the PC and in C1 it is the EX\_MEM result.
+
+\textbf{Hazards.} When an instruction is in ID, the instruction before it is in MEM and the one before that was written back in the previous C0 (the register file is written in C0 and read in C1). One forwarding unit in ID therefore suffices: it takes the value of the instruction in MEM from the EX\_MEM result, or from the memory output of the same C1 if that instruction is a load. The pipeline never stalls, including for load-use.
+
+\textbf{Branches (Bonus 4).} Branch condition and the branch, JAL and JALR targets are computed in ID. The PC loads the target at the end of that C1 and the next fetch is already correct, so a taken branch loses no cycle and no wrong-path instruction is fetched.
+
+\textbf{EBREAK / NOPs.} EBREAK sets a halt flip-flop (the PC never changes again). ECALL, FENCE, FENCE.TSO and PAUSE are NOPs.
+
+\begin{landscape}
+\begin{figure}[p]
+\centering
+\resizebox{\linewidth}{!}{\input{datapath_fig.tex}}
+\caption{Datapath of \file{pipeline.v}. Labels next to a short arrow are connected to the label of the same name elsewhere. Orange: pipeline registers (with the phase in which they load). Green: the single memory, used by IF in C0 and MEM in C1.}\label{fig:datapath}
+\end{figure}
+\end{landscape}
+
+\hd{2. Implementation}
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+File & Role\\
+\midrule
+\file{pipeline.v} & CPU top level: stages, pipeline registers, ID-stage branch logic, EBREAK halt\\
+\file{PhaseController.v}, \file{PipelineReg.v} & C0/C1 toggle; register with load enable\\
+\file{UnifiedMem.v} & 1 KB single-port memory, word array with byte enables, built-in board programs\\
+\file{ForwardingUnit.v}, \file{BranchUnit.v} & Forwarding into ID; six branch conditions\\
+\file{control\_unit.v}, \file{alu\_unit.v}, \file{ALU.v}, \file{ImmGen.v} & Decode, ALU select, ALU with RV32M (division by zero handled), immediates\\
+\file{RegFile.v} & 32 registers, x0 = 0, write in C0, read in C1\\
+\file{datapath\_board\_pipelined.v}, \file{Debounce.v}, \file{SevenSegDecimal8.v}, \file{const1.xdc} & FPGA top level, button debounce, 8-digit decimal display, pins\\
+\file{pipeline\_tb.v}, \file{ALU\_tb.v}, \file{UnifiedMem\_tb.v} & Testbenches\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\textbf{RV32M (Bonus 2).} MUL, MULH, MULHSU, MULHU, DIV, DIVU, REM and REMU are in \file{ALU.v}, selected by a 5-bit ALU select from \file{alu\_unit.v}. They are combinational. DIV/DIVU by zero return all ones, REM/REMU by zero return the dividend.
+
+\hd{3. Verification and results}
+
+\file{pipeline\_tb.v} runs the program on the pipeline and, in parallel, on a reference RV32IM model written inside the testbench. For every instruction it checks the PC and instruction word in ID (this verifies every branch and jump), the register value in WB exactly three cycles after ID, and address, data and size of every store. It checks every cycle that memory is written only in C1, the register file only in C0, that the PC freezes after EBREAK and that an instruction enters ID every two cycles. At the end all registers and the data memory must equal the model's.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Test & Result\\
+\midrule
+\file{pipeline\_tb} (full test program) & 238 / 238 instructions pass in 483 cycles, 0 errors; 42 / 42 RV32I and 8 / 8 RV32M covered\\
+Hazards in that run & 77 ALU-to-use and 11 load-to-use at distance 1, 55 used by branches, 4 by JALR, 5 as store data, all forwarded; 13 at distance 2 from the register file; 0 stalls\\
+Branches and jumps & 35 taken and 48 not taken, all resolved in ID with 0 lost cycles\\
+Board programs \file{quick}, \file{all\_instr}, \file{demo}, \file{hazards}, \file{nops\_halt} & all pass (x30 = \texttt{0xC0DE}, x31 = 0)\\
+Official \texttt{riscv-tests} rv32ui (40 programs) & 40 / 40 pass\\
+\file{ALU\_tb}, \file{UnifiedMem\_tb} & pass (37\,152 ALU checks)\\
+Mutation test (8 deliberate bugs) & 8 / 8 caught\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Every RAW hazard case is covered by the full test and by \file{hazards.s}/\file{demo.s}: ALU or load result used at once by an ALU instruction, a branch, JALR or a store; link value of JAL used at once; distance 2; writes to x0 never forwarded. Outputs are in \file{test/results/}.
+
+\hd{4. Waveforms}
+
+The waveforms are screenshots of GTKWave showing the VCD files written by the simulation (\file{test/wave/}). Signals from the top: clock, reset, \sig{isC0}/\sig{isC1}, PC, instruction in ID, \sig{forwardA}/\sig{forwardB}, forwarded operands, branch decision and jump target, ALU output, memory port address / write / data, register write enable, destination and write-back data, halt.
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/wave_demo_hazard.png}
+\caption{\file{demo} program, 9--20\,ns. \texttt{beq x3,x3} (\texttt{0x00318463}) directly follows \texttt{add x3,x2,x1}: both forwarding selects are high, both operands are \texttt{0xC}, \sig{ID_TakeBranch} rises in C1 and the next PC is the target \texttt{0x14}, so \texttt{0x10} is never fetched. Later \texttt{bne x4,x3} receives the load result of \texttt{lw x4} through \sig{forwardA} from the memory output; it is not taken.}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/wave_quick_memory.png}
+\caption{\file{quick} program, 46--66\,ns: \texttt{sw}, \texttt{sh}, \texttt{sb} (three \sig{memPortWrite} pulses, always in C1, at \texttt{0x300}, \texttt{0x304}, \texttt{0x306}) followed by \texttt{lw}, \texttt{lh}, \texttt{lb}, \texttt{lhu}, \texttt{lbu}. The memory address alternates between PC (C0) and data address (C1).}
+\end{figure}
+
+\begin{figure}[H]\centering
+\includegraphics[width=\linewidth]{figures/wave_quick_muldiv.png}
+\caption{\file{quick} program, 84--104\,ns: \texttt{lui} then \texttt{mul}, \texttt{mulh}, \texttt{mulhsu}, \texttt{mulhu}, \texttt{div}, \texttt{divu}, \texttt{rem}, \texttt{remu}; write-back values 60, 1, 1, 1, 6, 2, 2, 1.}
+\end{figure}
+
+\hd{5. FPGA testing (Nexys A7-100T)}
+
+The top level (\file{datapath\_board\_pipelined.v}) uses BTNC as a debounced single-step CPU clock (one press = one cycle). SW15 is reset, SW0 chooses LED bits 14..0 or 30..16 of the instruction in ID, and SW3 SW2 SW1 choose what the 8-digit decimal display shows: 000 PC, 001 instruction in ID, 010 EX result, 011 memory address, 100 memory data, 101 store data, 110 write-back data, 111 write-back register. LD15 and the decimal points light when EBREAK has halted the CPU. The program \file{quick} executes every instruction once; \file{test/board\_quick\_guide.md} lists the expected value for every press.
+
+The photos show the display in the write-back data view while stepping the first instructions of \file{quick}:
+
+\begin{center}\small
+\begin{tabular}{@{}c l c c@{}}
+\toprule
+Photo & Instruction & Press & Display\\
+\midrule
+(a) & \texttt{li x1, 12} & 4 & 00000012\\
+(b) & \texttt{li x2, 5} & 6 & 00000005\\
+(c) & \texttt{li x4, 2} & 8 & 00000002\\
+(d) & \texttt{add x3, x1, x2} & 10 & 00000017\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[H]\centering
+\begin{subfigure}{0.48\linewidth}\includegraphics[width=\linewidth]{figures/board_display_12.jpg}\caption{12}\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\includegraphics[width=\linewidth]{figures/board_display_5.jpg}\caption{5}\end{subfigure}\\[0.5em]
+\begin{subfigure}{0.48\linewidth}\includegraphics[width=\linewidth]{figures/board_display_2.jpg}\caption{2}\end{subfigure}\hfill
+\begin{subfigure}{0.48\linewidth}\includegraphics[width=\linewidth]{figures/board_display_17.jpg}\caption{17}\end{subfigure}
+\caption{Display values on the board, matching the table above (the display is decimal).}
+\end{figure}
+
+\hd{6. Issues, assumptions and limitations}
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+\toprule
+Issue & Solution\\
+\midrule
+One memory port for instructions and data & Two-cycle stages: IF uses the port in C0, MEM in C1 (CPI = 2)\\
+Branches in EX cost two cycles; a hazard unit stalled for branch operands & Decision moved to ID with forwarding into ID: no penalty, no stalls, no flush except after EBREAK\\
+Branch predictor (Bonus 3) draft & Dropped: with the decision in ID there is no misprediction cost to hide\\
+Decode halted on ECALL as well as EBREAK & Only EBREAK halts; ECALL, FENCE, FENCE.TSO, PAUSE are NOPs\\
+Memory should not use thousands of flip-flops & Word array with byte enables, mapped to distributed RAM\\
+Vivado default simulation time is 1000\,ns & Testbench uses a 1\,ns clock and a built-in program; it ends at 485\,ns\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\textbf{Limitations.} Loads and stores must be aligned (misaligned access and the \texttt{ma\_data} test are not supported). No traps, CSRs or FENCE.I. Memory is 1 KB (code from \texttt{0x000}, data from \texttt{0x300}). RV32M is combinational. The board is clocked by a button, so no maximum frequency is claimed.
+
+\hd{7. Reproduce}
+
+\begin{lstlisting}
+cd Verilog
+sh ../test/run_all.sh              # all simulations: PASS / FAIL
+python3 ../test/mutation_test.py   # 8 / 8 mutants caught
+cd ../test/wave && sh make_waves.sh   # VCD files for GTKWave
+\end{lstlisting}
+For Vivado: add all \file{Verilog/*.v} except testbenches, \file{defines.vh} and \file{const1.xdc}; top module \file{datapath_board_pipelined}.
+
+\hd{8. AI disclosure}
+
+Claude Pro and Gemini Pro were used.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{@{}l X X@{}}
+\toprule
+Part of this report & What the AI did & Prompt used\\
+\midrule
+Datapath schematic (Fig.~\ref{fig:datapath}) & Wrote the TikZ drawing from the Verilog sources & ``Draw the datapath of this 3-stage pipeline from pipeline.v as TikZ, with the pipeline registers, the forwarding unit and the branch logic in ID, and the single memory shared by IF and MEM.''\\
+Simulation results (Sec.~3) & Ran the testbench, riscv-tests, board programs and mutation test and collected the numbers & ``Run every self-checking test in the Verilog and test folders with Icarus Verilog and give me the pass counts.''\\
+Waveform screenshots (Sec.~4) & Wrote a wrapper that dumps a VCD without editing the design, opened it in GTKWave and captured the screenshots; wrote the figure captions & ``Dump a VCD for the demo and quick programs without changing the Verilog, open it in GTKWave with the pipeline signals and take screenshots.''\\
+Board table (Sec.~5) & Matched the four board photos to the expected values of the quick program & ``Which instruction and button press of the quick program produces each value shown on the board photos?''\\
+Design check & We asked the assistants to check the connections and the hazard handling of the design and to report anything wrong & ``Check the connections between the modules in pipeline.v and the forwarding and branch hazard handling, and tell me if anything is wrong.''\\
+Report wording and layout & Refined the wording of the text and the layout of the tables and figures & ``Tighten the wording of this report and improve the layout of the tables and figures without changing the content.''\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\end{document}
